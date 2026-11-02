@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import sqlite3
 import tarfile
 from pathlib import Path
 from typing import NamedTuple
@@ -367,3 +368,8 @@ def row_dict(instance: Path, sql: str, params=()) -> dict | None:
         return None if found is None else dict(found)
     finally:
         con.close()
+
+
+def secure_delete_default() -> bool:
+    """Whether this SQLite build zeroes deleted content by default, as Ubuntu's does."""
+    return bool(sqlite3.connect(":memory:").execute("PRAGMA secure_delete").fetchone()[0])

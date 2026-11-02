@@ -25,6 +25,7 @@ from tests.phase2a import custom_instance, export, item, run_collect, sources
 from tests.phase2b import (
     K, KEYS2, M, OPERATOR, PATH, REASON, REF, TEXT, bundle_members_hit, find_in, hot_journal, scan_instance, seed,
 )
+from tests.phase2b import secure_delete_default
 from tests.test_carry_forward import AGENTS
 from tests.test_truth import Clock, _apply, _ok, clock  # noqa: F401
 
@@ -397,7 +398,9 @@ def test_resume_after_a_stop(tmp_path: Path, clock: Clock, monkeypatch) -> None:
     monkeypatch.setattr(redact, "_vacuum", stop)
     with pytest.raises(Unavailable):
         redact.run(instance, sid, REASON, OPERATOR)
-    assert (instance / "REDACTING").exists() and find_in((instance / "brain.sqlite3").read_bytes())
+    assert (instance / "REDACTING").exists()
+    # Until compaction the text is still in the file, unless this SQLite zeroes deleted content by default.
+    assert secure_delete_default() or find_in((instance / "brain.sqlite3").read_bytes())
     again = redact.run(instance, sid, REASON, OPERATOR)
     assert again["change_id"].endswith("-2")
     assert not (instance / "REDACTING").exists() and scan_instance(instance) == {}
@@ -459,7 +462,8 @@ def test_resume_after_a_vacuum_is_killed(tmp_path: Path, clock: Clock, monkeypat
         backup.backup(instance, tmp_path / "no")
     info = redact.plan(instance, sid)  # the first open recovers the store
     assert info["sources"] and not journal.exists()
-    assert find_in(db.read_bytes())  # the old pages, and the text in the free ones, are back in the file
+    # The old pages, and the text in the free ones, are back in the file, unless this SQLite zeroed them.
+    assert secure_delete_default() or find_in(db.read_bytes())
     result = redact.run(instance, sid, REASON, OPERATOR)
     assert result["database"]["freelist_count"] == 0
     assert not journal.exists() and not (instance / "REDACTING").exists()

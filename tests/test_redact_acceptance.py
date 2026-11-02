@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 import shutil
+import sqlite3
 import subprocess
 import time
 from pathlib import Path
@@ -20,6 +20,7 @@ from tests.phase2b import (
     CONTROLS, EXTRA_PLACES, K, KEYS2, M, OPERATOR, PATH, PLACES, REASON, REF, bundle_members_hit, controls_now,
     find_in, places_before, redact_now, scan_instance, seed, windows,
 )
+from tests.phase2b import secure_delete_default
 from tests.test_carry_forward import AGENTS
 from tests.test_truth import Clock, _apply, _ok, clock  # noqa: F401
 
@@ -78,9 +79,10 @@ def test_acceptance_1_each_step_is_needed(tmp_path: Path, clock: Clock, monkeypa
         with monkeypatch.context() as patch:
             rows[name] = run_variant(tmp_path / name, clock, patch, optimize=optimize, vacuum=vacuum)
     print("TABLE 1", json.dumps(rows, sort_keys=True))
-    assert rows["none"]["exact"] and rows["none"]["lower"] and rows["none"]["windows"] == 55 and rows["none"]["post_bundle"]
-    assert not rows["vacuum"]["exact"] and rows["vacuum"]["lower"] and 0 < rows["vacuum"]["windows"] < 55 and rows["vacuum"]["post_bundle"]
-    assert rows["optimize"]["exact"] and rows["optimize"]["lower"] and rows["optimize"]["windows"] == 55 and rows["optimize"]["post_bundle"]
+    if not secure_delete_default():  # with it, SQLite zeroes deleted text itself, so the controls have nothing to show
+        assert rows["none"]["exact"] and rows["none"]["lower"] and rows["none"]["windows"] == 55 and rows["none"]["post_bundle"]
+        assert not rows["vacuum"]["exact"] and rows["vacuum"]["lower"] and 0 < rows["vacuum"]["windows"] < 55 and rows["vacuum"]["post_bundle"]
+        assert rows["optimize"]["exact"] and rows["optimize"]["lower"] and rows["optimize"]["windows"] == 55 and rows["optimize"]["post_bundle"]
     assert not rows["both"]["exact"] and not rows["both"]["lower"] and rows["both"]["windows"] == 0 and not rows["both"]["post_bundle"]
     with monkeypatch.context() as patch:
         skipped = run_variant(tmp_path / "noexport", clock, patch, optimize=True, vacuum=True, exports=False)
