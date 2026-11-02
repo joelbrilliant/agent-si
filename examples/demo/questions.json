@@ -1,0 +1,81 @@
+{
+  "questions": [
+    {
+      "id": "q1",
+      "shape": "Where does one compliance checklist item stand?",
+      "question": "Where does the quarterly access review checklist item stand?",
+      "baseline_calls": {"min": 2, "max": 2},
+      "minimal_path": [
+        {
+          "tool": "records_query",
+          "arguments": {
+            "entity": "checklist_item",
+            "filters": {"title": {"contains": "access review"}},
+            "fields": ["id", "title", "state", "owner_person_id", "waiting_on_person_id", "land_by"]
+          }
+        }
+      ],
+      "expect": {
+        "total": 1,
+        "rows.0.id": "chk-demo-access-review",
+        "rows.0.state": "waiting",
+        "rows.0.owner_person_id": "per-alex-example",
+        "rows.0.waiting_on_person_id": "per-casey-example",
+        "rows.0.land_by": "2026-10-15"
+      },
+      "answer_must": [
+        "The item is waiting",
+        "It waits on Casey Example",
+        "Alex owns it",
+        "It lands by 2026-10-15"
+      ]
+    },
+    {
+      "id": "q2",
+      "shape": "Has the principal replied to a named contact's email from a given date and time?",
+      "question": "Has Alex replied to Robin Example's email of 2 September 2026 at 16:40 UTC?",
+      "baseline_calls": {"min": 2, "max": 3},
+      "minimal_path": [
+        {
+          "tool": "records_query",
+          "arguments": {
+            "entity": "thread",
+            "filters": {"last_inbound_at": "2026-09-02T16:40:00Z"},
+            "fields": ["id", "subject", "last_inbound_at", "last_outbound_at"]
+          }
+        }
+      ],
+      "expect": {
+        "total": 1,
+        "rows.0.subject": "Onboarding checklist for the new site",
+        "rows.0.last_inbound_at": "2026-09-02T16:40:00Z",
+        "rows.0.last_outbound_at": "2026-09-03T08:05:00Z"
+      },
+      "answer_must": [
+        "Yes, Alex replied",
+        "replied 3 September 2026, 08:05 UTC"
+      ]
+    },
+    {
+      "id": "q3",
+      "shape": "Which regional instance of the compliance platform does the company use?",
+      "question": "Which regional instance of the compliance platform does Example Co use?",
+      "baseline_calls": {"min": 0, "max": 0},
+      "minimal_path": [
+        {"tool": "fact_get", "arguments": {"key": "vendor.compliance.instance"}}
+      ],
+      "expect": {
+        "total": 1,
+        "facts.0.key": "vendor.compliance.instance",
+        "facts.0.value": "eu",
+        "facts.0.basis": "reported",
+        "facts.0.as_of": "2026-09-30",
+        "facts.0.stale": false,
+        "facts.0.source.id": "src-demo-setup-note"
+      },
+      "answer_must": [
+        "The EU instance"
+      ]
+    }
+  ]
+}

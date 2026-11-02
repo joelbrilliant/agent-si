@@ -1,0 +1,42 @@
+# People
+
+- Alex Example: Engineer, Example Co
+- Blair Example: Product manager, Example Co
+- Casey Example: Account executive, Example Co
+- Dana Example: Support lead, Example Co
+- Elliot Example: Security lead, Example Co
+- Finley Example: Finance lead, Example Co
+- Gray Example: Designer, Example Co
+- Harper Example: Operations lead, Example Co
+- Indy Example: Engineer, Example Co
+- Jordan Example: Product manager, Example Co
+- Kai Example: Account executive, Example Co
+- Logan Example: Support lead, Example Co
+- Morgan Example: Security lead, Example Co
+- Noel Example: Finance lead, Example Co
+- Oakley Example: Designer, Example Co
+- Parker Example: Operations lead, Example Co
+- Quinn Example: Engineer, Example Co
+- Riley Example: Product manager, Example Co
+- Sam Example: Account executive, Example Co
+- Taylor Example: Support lead, Example Co
+- Uma Example: Security lead, Example Co
+- Val Example: Finance lead, Example Co
+- Wren Example: Designer, Example Co
+- Xan Example: Operations lead, Example Co
+- Yael Example: Engineer, Example Co
+- Zion Example: Product manager, Example Co
+- Ari Example: Account executive, Example Co
+- Bryn Example: Support lead, Example Co
+- Cleo Example: Account manager, Example Supplies
+- Drew Example: Account manager, Example Supplies
+- Eden Example: Account manager, Example Supplies
+- Faye Example: Account manager, Example Supplies
+- Glen Example: Auditor, Example Audit
+- Hale Example: Auditor, Example Audit
+- Ira Example: Auditor, Example Audit
+- Jude Example: Auditor, Example Audit
+- Kit Example: Partner lead, Example Partners
+- Lane Example: Partner lead, Example Partners
+- Mika Example: Partner lead, Example Partners
+- Nico Example: Partner lead, Example Partners

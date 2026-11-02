@@ -1,0 +1,32 @@
+{
+  "format": "agent-brain.gmail.v1",
+  "fetched_at": "2026-10-05T06:00:00Z",
+  "complete": true,
+  "account": "mail",
+  "outbound_visible": true,
+  "threads": [
+    {
+      "id": "demo-onboarding",
+      "subject": "Onboarding checklist for the new site",
+      "messages": [
+        {"at": "2026-09-02T16:40:00Z", "direction": "inbound"},
+        {"at": "2026-09-03T08:05:00Z", "direction": "outbound"}
+      ]
+    },
+    {
+      "id": "demo-renewal-2027",
+      "subject": "Renewal quote for 2027",
+      "messages": [
+        {"at": "2026-09-12T10:00:00Z", "direction": "outbound"},
+        {"at": "2026-09-14T09:12:00Z", "direction": "inbound"}
+      ]
+    },
+    {
+      "id": "demo-newsletter",
+      "subject": "Monthly product newsletter",
+      "messages": [
+        {"at": "2026-09-20T07:00:00Z", "direction": "inbound"}
+      ]
+    }
+  ]
+}

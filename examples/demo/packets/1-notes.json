@@ -1,0 +1,41 @@
+{
+  "packet_version": 1,
+  "change_id": "notes-demo-sources-1",
+  "agent": "notes",
+  "intent": "Add the three demo notes",
+  "ops": [
+    {
+      "op": "add_source",
+      "row": {
+        "id": "src-demo-setup-note",
+        "kind": "user_note",
+        "title": "Compliance platform setup note",
+        "source_date": "2026-09-30",
+        "author_person_id": null,
+        "content": "Setup note, 30 September 2026. Example Co's compliance platform workspace runs on the EU regional instance, at eu.compliance.example.com."
+      }
+    },
+    {
+      "op": "add_source",
+      "row": {
+        "id": "src-demo-team-note",
+        "kind": "user_note",
+        "title": "Weekly team note",
+        "source_date": "2026-09-28",
+        "author_person_id": null,
+        "content": "Team note, 28 September 2026. Casey Example is Example Co's IT lead. The quarterly access review is waiting on Casey's export of the user list, and it should land by 15 October. The annual vendor risk review is in progress. The backup restore test passed on 25 September. Robin Example is the account manager at Example Supplies."
+      }
+    },
+    {
+      "op": "add_source",
+      "row": {
+        "id": "src-demo-mail-triage",
+        "kind": "user_note",
+        "title": "Mail triage note",
+        "source_date": "2026-09-28",
+        "author_person_id": null,
+        "content": "Mail triage, 28 September 2026. Robin Example wrote on 2 September 2026 at 16:40 UTC about the onboarding checklist, in the thread demo-onboarding. Robin Example wrote again on 14 September 2026 at 09:12 UTC about the 2027 renewal quote, in the thread demo-renewal-2027."
+      }
+    }
+  ]
+}

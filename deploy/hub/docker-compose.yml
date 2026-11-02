@@ -1,0 +1,63 @@
+# agent-si hub. One hub serves one brain for one company. Copy env.example to .env first.
+name: agent-si-hub
+
+x-brain: &brain
+  image: ${BRAIN_IMAGE:?set BRAIN_IMAGE in .env to the image you built, tagged by version}
+  read_only: true
+  tmpfs: [/tmp]
+  restart: unless-stopped
+  environment:
+    # The root filesystem is read-only: machine state (update.json) lives on the data volume, so the brief's
+    # update notice works the same as locally.
+    XDG_STATE_HOME: /data/state
+    XDG_CONFIG_HOME: /data/config
+  volumes:
+    - brain-data:/data
+    - brain-backups:/backups
+
+services:
+  brain:
+    <<: *brain
+    # The port is never published: only Caddy reaches it.
+    expose: ["8080"]
+
+  fetch:
+    <<: *brain
+    # Intake on its own service, so a stopped loop shows in ./hub status. Credentials go in /run/secrets (docs/HUB.md).
+    command: ["sh", "-c", "while :; do brain-fetch run --instance /data/brain; sleep ${FETCH_EVERY_SECONDS:-1800}; done"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,sys,time; p='/data/brain/fetch'; sys.exit(0 if os.path.isdir(p) else 1)"]
+      interval: 5m
+      timeout: 10s
+
+  caddy:
+    image: caddy:2@sha256:f2a1290d0463aad60660d4ec134943f183ee2a5f6c3eb7bf32dd984f2f020772
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      BRAIN_HOST: ${BRAIN_HOST:?set BRAIN_HOST in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates survive a recreate: losing them re-issues on every start and can hit rate limits.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [brain]
+
+  offsite:
+    # Optional: docker compose --profile offsite up -d. Copies, never deletes: a changed same-name file fails.
+    profiles: ["offsite"]
+    image: rclone/rclone@sha256:2687085f718d3c628f7fdfb77c52a1d344332aed543110bb88088f2c70d43eb5
+    restart: unless-stopped
+    entrypoint: ["sh", "-c"]
+    command: ["while :; do rclone copy --immutable --s3-no-check-bucket /backups offsite:$${OFFSITE_PATH}; sleep 900; done"]
+    environment:
+      OFFSITE_PATH: ${OFFSITE_PATH:-agent-si-backups}
+    volumes:
+      - brain-backups:/backups:ro
+      - ${RCLONE_CONFIG:-./rclone.conf}:/config/rclone/rclone.conf:ro
+
+volumes:
+  brain-data:
+  brain-backups:
+  caddy-data:
+  caddy-config:

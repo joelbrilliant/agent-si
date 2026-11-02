@@ -1,0 +1,46 @@
+# Configuration for the "{name}" brain instance.
+# After editing, run `brain apply-config --instance <this directory>` so the principal,
+# workstreams and fact keys reach the store. Agent policy is read on every apply.
+
+[instance]
+name = "{name}"
+timezone = "{timezone}"
+
+{principal_block}
+
+[[workstreams]]
+id = "general"
+title = "General"
+description = "Default workstream."
+sort_order = 100
+
+# Every fact must use a key registered here.
+# [[fact_keys]]
+# key = "company.billing.plan"
+# value_type = "enum"          # text, int, number, date, bool, url or enum
+# allowed_values = ["free", "team", "enterprise"]
+# unit = ""
+# stale_after_days = 30
+# description = "Current billing plan."
+
+# Agents that may submit change packets. kind = "agent" (the default) cites sources but
+# can't add them. Only collectors (kind = "collector") add sources, so every quote is
+# checked against text a collector captured.
+[agents.assistant]
+kind = "agent"
+operations = "*"               # "*" or a list of operation names
+approval = "none"              # "none" or "required"
+approvers = []                 # agents that may approve this agent's held packets
+author_principal = false       # kind = "collector" only: may add sources authored by the principal
+
+# Each collector writes as its own agent, with exactly its type's operations.
+# [agents.notes]
+# kind = "collector"
+# operations = ["add_source", "record_collector_run"]
+
+# Collectors read fixture documents only: brain collect --instance DIR --fixture FILE NAME
+[collectors]
+# [collectors.notes]
+# type = "files"
+# agent = "notes"
+# root = "notes"

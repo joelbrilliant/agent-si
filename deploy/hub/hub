@@ -1,0 +1,105 @@
+#!/bin/sh
+# agent-si hub host script. Run it beside docker-compose.yml and .env.
+#   ./hub update --image REF                                          the update steps with an image you built, tagged by version
+#   ./hub status                                                      every service, the last backup, the fetch loop
+#   ./hub prune-offsite --remote NAME:PATH [--before UTCSTAMP]        from the admin machine, with a delete credential
+set -eu
+cd "$(dirname "$0")"
+DC="${DOCKER_COMPOSE:-docker compose}"
+say() { printf '%s\n' "$*"; }
+die() { printf 'hub: %s\n' "$1" >&2; exit "${2:-1}"; }
+stamp() { date -u +%Y%m%dT%H%M%SZ; }
+env_image() { sed -n 's/^BRAIN_IMAGE=//p' .env | tail -n 1; }
+set_image() { tmp=".env.$$"; grep -v '^BRAIN_IMAGE=' .env > "$tmp" || true; printf 'BRAIN_IMAGE=%s\n' "$1" >> "$tmp"; mv "$tmp" .env; }
+run() { $DC run --rm -T brain "$@"; }
+
+ready() { # /readyz within 60 seconds
+  i=0
+  while [ $i -lt 30 ]; do
+    if $DC exec -T brain python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=4).status == 200 else 1)" >/dev/null 2>&1; then return 0; fi
+    i=$((i + 1)); sleep 2
+  done
+  return 1
+}
+
+smoke() { # initialize, tools/list and brief over the container's own stdio server
+  printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}' \
+    '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+    '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"brief","arguments":{}}}' |
+    $DC exec -T brain brain serve --instance /data/brain | grep -c '"result"' | grep -qx 3
+}
+
+update() {
+  image=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --image) image="$2"; shift 2 ;;
+      *) die "unknown option $1" 2 ;;
+    esac
+  done
+  [ -n "$image" ] || die "./hub update doesn't fetch anything: download the agent-si wheel from https://github.com/joelbrilliant/agent-si/releases, build the image from it (docs/HUB.md), then run ./hub update --image IMAGE-YOU-BUILT" 2
+  [ -f .env ] || die "no .env here" 2
+  current="$(run brain --version | awk '{print $2}')" || die "the running image's brain doesn't start"
+  docker image inspect "$image" >/dev/null 2>&1 || die "there is no image $image on this machine: build it from the release wheel first (docs/HUB.md)" 2
+  say "hub: updating from $current to $image"
+  $DC stop brain fetch >/dev/null                                               # 2. stop writes
+  bundle="$(run brain backup --instance /data/brain --out /backups --label pre-update | sed -n 's/.*"bundle": "\([^"]*\)".*/\1/p')"
+  [ -n "$bundle" ] || { $DC up -d >/dev/null; die "the pre-update backup failed; nothing changed"; }   # 3. back up
+  cp .env .env.previous                                                         # 4. upgrade
+  set_image "$image"
+  if run brain migrate --instance /data/brain >/dev/null &&                     # 5. migrate
+     run brain check --instance /data/brain >/dev/null &&                       # 6. check
+     $DC up -d >/dev/null && ready && smoke; then
+    run python -c "from pathlib import Path; from brain_hub import tokens; tokens.audit(Path('/data/brain'), 'update', token_id='shell', detail='$current to $image')" || true
+    say "hub: updated to $image"; return 0
+  fi
+  say "hub: the update failed; restoring $bundle with the old image"           # rollback in the same run
+  cp .env.previous .env
+  $DC stop brain fetch >/dev/null 2>&1 || true
+  aside="/data/broken-$(stamp)"
+  run sh -c "mv /data/brain $aside && brain restore '$bundle' --dir /data/brain" >/dev/null || die "the restore failed; see $aside and $bundle" 5
+  $DC up -d >/dev/null
+  ready || die "rolled back, but /readyz isn't answering; see docker compose logs brain" 5
+  die "update failed and was rolled back to $(env_image); the broken store is at $aside" 5
+}
+
+status() {
+  bad=0
+  for service in brain fetch caddy; do
+    state="$($DC ps --format '{{.State}} {{.Health}}' "$service" 2>/dev/null | head -n 1)"
+    say "$service: ${state:-not running}"
+    case "$state" in running*unhealthy*|"") bad=1 ;; running*) ;; *) bad=1 ;; esac
+  done
+  newest="$(run sh -c 'ls -t /backups/*.tar.gz 2>/dev/null | head -n 1')" || true
+  say "last backup: ${newest:-none}"
+  [ -n "$newest" ] || bad=1
+  [ "$bad" = 0 ] || die "something needs a look (above)"
+}
+
+prune_offsite() {
+  remote=""; before=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --remote) remote="$2"; shift 2 ;;
+      --before) before="$2"; shift 2 ;;
+      *) die "unknown option $1" 2 ;;
+    esac
+  done
+  [ -n "$remote" ] || die "--remote NAME:PATH is required: a remote whose credential may delete, kept off the server" 2
+  rclone delete --min-age 35d "$remote"
+  if [ -n "$before" ]; then
+    # After brain redact: every bundle made before the redaction holds the text.
+    rclone lsf --files-only "$remote" | while read -r name; do
+      at="$(printf '%s' "$name" | sed -n 's/.*-\([0-9]\{8\}T[0-9]\{6\}Z\)-seq.*/\1/p')"
+      [ -n "$at" ] && [ "$at" \< "$before" ] && rclone deletefile "$remote/$name"
+    done
+  fi
+  say "hub: pruned $remote; with bucket versioning on, also expire the old versions (docs/HUB.md)"
+}
+
+case "${1:-}" in
+  update) shift; update "$@" ;;
+  status) shift; status ;;
+  prune-offsite) shift; prune_offsite "$@" ;;
+  *) die "usage: ./hub update | status | prune-offsite" 2 ;;
+esac

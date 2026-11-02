@@ -1,0 +1,17 @@
+{
+  "spec": "committed before the run",
+  "runs": 3,
+  "questions": 24,
+  "criteria": {
+    "B1": "at least 22 of 24 questions correct in at least 2 of 3 runs, and the brain's total correct at least the markdown arm's",
+    "B2": "in all 12 conflict sessions, the answer names both values and both sources and picks neither silently",
+    "B3": "in every abstention session, the brain arm says it doesn't hold it and invents nothing",
+    "B4": "every quote given as evidence is in the cited source word for word (by script)",
+    "B5": "median input tokens per question below the markdown arm's for each group (ratio reported)",
+    "B6": "median calls per question at most 3",
+    "B7": "at least 90% of questions get the same verdict and key values in all 3 runs",
+    "B8": "against the last milestone, correctness no lower and median input tokens no more than 15% higher"
+  },
+  "numbers": {"B1_min_correct": 22, "B1_min_runs": 2, "B6_max_median_calls": 3, "B7_min_share": 0.9, "B8_max_token_growth": 0.15},
+  "rule": "A failed criterion is recorded as not passed with the real numbers, and nothing is rerun to move a median. A broken setup (router not loaded, wrong model) doesn't count and is rerun in full, labelled as such."
+}

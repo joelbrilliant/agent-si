@@ -1,0 +1,633 @@
+[instance]
+name = "exampleco"
+timezone = "UTC"
+org = "Example Co"
+
+[principal]
+person_id = "per-alex-example"
+display_name = "Alex Example"
+names = ["Alex"]
+
+[[workstreams]]
+id = "general"
+title = "General"
+description = "Default workstream."
+sort_order = 100
+
+[[workstreams]]
+id = "platform"
+title = "Platform"
+description = "Example Cloud engineering and operations."
+sort_order = 200
+
+[[workstreams]]
+id = "sales"
+title = "Sales"
+description = "Customer and supplier email that needs a reply."
+sort_order = 300
+
+[[fact_keys]]
+key = "excloud.price"
+value_type = "number"
+unit = "AUD"
+stale_after_days = 180
+description = "Price of Example Cloud."
+
+[[fact_keys]]
+key = "excloud.seats"
+value_type = "int"
+unit = "seats"
+stale_after_days = 365
+description = "Seats of Example Cloud."
+
+[[fact_keys]]
+key = "excloud.max_context"
+value_type = "int"
+unit = "tokens"
+stale_after_days = 365
+description = "Max context of Example Cloud."
+
+[[fact_keys]]
+key = "excloud.gpu_memory"
+value_type = "number"
+unit = "GB"
+stale_after_days = 365
+description = "GPU memory of Example Cloud."
+
+[[fact_keys]]
+key = "excloud.region"
+value_type = "enum"
+allowed_values = ["au", "eu", "us"]
+stale_after_days = 365
+description = "Region of Example Cloud."
+
+[[fact_keys]]
+key = "excloud.sso"
+value_type = "bool"
+value_words = {true = ["included"], false = ["not included"]}
+stale_after_days = 365
+description = "SSO of Example Cloud."
+
+[[fact_keys]]
+key = "excloud.support_hours"
+value_type = "int"
+unit = "hours"
+stale_after_days = 365
+description = "Support hours of Example Cloud."
+
+[[fact_keys]]
+key = "excloud.retention_days"
+value_type = "int"
+unit = "days"
+stale_after_days = 365
+description = "Retention days of Example Cloud."
+
+[[fact_keys]]
+key = "excloud.launch_date"
+value_type = "date"
+stale_after_days = 365
+description = "Launch date of Example Cloud."
+
+[[fact_keys]]
+key = "excloud.current_version"
+value_type = "text"
+stale_after_days = 365
+description = "Current version of Example Cloud."
+
+[[fact_keys]]
+key = "exbasic.price"
+value_type = "number"
+unit = "AUD"
+stale_after_days = 180
+description = "Price of Example Basic."
+
+[[fact_keys]]
+key = "exbasic.seats"
+value_type = "int"
+unit = "seats"
+stale_after_days = 365
+description = "Seats of Example Basic."
+
+[[fact_keys]]
+key = "exbasic.max_context"
+value_type = "int"
+unit = "tokens"
+stale_after_days = 365
+description = "Max context of Example Basic."
+
+[[fact_keys]]
+key = "exbasic.gpu_memory"
+value_type = "number"
+unit = "GB"
+stale_after_days = 365
+description = "GPU memory of Example Basic."
+
+[[fact_keys]]
+key = "exbasic.region"
+value_type = "enum"
+allowed_values = ["au", "eu", "us"]
+stale_after_days = 365
+description = "Region of Example Basic."
+
+[[fact_keys]]
+key = "exbasic.sso"
+value_type = "bool"
+value_words = {true = ["included"], false = ["not included"]}
+stale_after_days = 365
+description = "SSO of Example Basic."
+
+[[fact_keys]]
+key = "exbasic.support_hours"
+value_type = "int"
+unit = "hours"
+stale_after_days = 365
+description = "Support hours of Example Basic."
+
+[[fact_keys]]
+key = "exbasic.retention_days"
+value_type = "int"
+unit = "days"
+stale_after_days = 365
+description = "Retention days of Example Basic."
+
+[[fact_keys]]
+key = "exbasic.launch_date"
+value_type = "date"
+stale_after_days = 365
+description = "Launch date of Example Basic."
+
+[[fact_keys]]
+key = "exbasic.current_version"
+value_type = "text"
+stale_after_days = 365
+description = "Current version of Example Basic."
+
+[[fact_keys]]
+key = "expro.price"
+value_type = "number"
+unit = "AUD"
+stale_after_days = 180
+description = "Price of Example Pro."
+
+[[fact_keys]]
+key = "expro.seats"
+value_type = "int"
+unit = "seats"
+stale_after_days = 365
+description = "Seats of Example Pro."
+
+[[fact_keys]]
+key = "expro.max_context"
+value_type = "int"
+unit = "tokens"
+stale_after_days = 365
+description = "Max context of Example Pro."
+
+[[fact_keys]]
+key = "expro.gpu_memory"
+value_type = "number"
+unit = "GB"
+stale_after_days = 365
+description = "GPU memory of Example Pro."
+
+[[fact_keys]]
+key = "expro.region"
+value_type = "enum"
+allowed_values = ["au", "eu", "us"]
+stale_after_days = 365
+description = "Region of Example Pro."
+
+[[fact_keys]]
+key = "expro.sso"
+value_type = "bool"
+value_words = {true = ["included"], false = ["not included"]}
+stale_after_days = 365
+description = "SSO of Example Pro."
+
+[[fact_keys]]
+key = "expro.support_hours"
+value_type = "int"
+unit = "hours"
+stale_after_days = 365
+description = "Support hours of Example Pro."
+
+[[fact_keys]]
+key = "expro.retention_days"
+value_type = "int"
+unit = "days"
+stale_after_days = 365
+description = "Retention days of Example Pro."
+
+[[fact_keys]]
+key = "expro.launch_date"
+value_type = "date"
+stale_after_days = 365
+description = "Launch date of Example Pro."
+
+[[fact_keys]]
+key = "expro.current_version"
+value_type = "text"
+stale_after_days = 365
+description = "Current version of Example Pro."
+
+[[fact_keys]]
+key = "exteam.price"
+value_type = "number"
+unit = "AUD"
+stale_after_days = 180
+description = "Price of Example Team."
+
+[[fact_keys]]
+key = "exteam.seats"
+value_type = "int"
+unit = "seats"
+stale_after_days = 365
+description = "Seats of Example Team."
+
+[[fact_keys]]
+key = "exteam.max_context"
+value_type = "int"
+unit = "tokens"
+stale_after_days = 365
+description = "Max context of Example Team."
+
+[[fact_keys]]
+key = "exteam.gpu_memory"
+value_type = "number"
+unit = "GB"
+stale_after_days = 365
+description = "GPU memory of Example Team."
+
+[[fact_keys]]
+key = "exteam.region"
+value_type = "enum"
+allowed_values = ["au", "eu", "us"]
+stale_after_days = 365
+description = "Region of Example Team."
+
+[[fact_keys]]
+key = "exteam.sso"
+value_type = "bool"
+value_words = {true = ["included"], false = ["not included"]}
+stale_after_days = 365
+description = "SSO of Example Team."
+
+[[fact_keys]]
+key = "exteam.support_hours"
+value_type = "int"
+unit = "hours"
+stale_after_days = 365
+description = "Support hours of Example Team."
+
+[[fact_keys]]
+key = "exteam.retention_days"
+value_type = "int"
+unit = "days"
+stale_after_days = 365
+description = "Retention days of Example Team."
+
+[[fact_keys]]
+key = "exteam.launch_date"
+value_type = "date"
+stale_after_days = 365
+description = "Launch date of Example Team."
+
+[[fact_keys]]
+key = "exteam.current_version"
+value_type = "text"
+stale_after_days = 365
+description = "Current version of Example Team."
+
+[[fact_keys]]
+key = "exscale.price"
+value_type = "number"
+unit = "AUD"
+stale_after_days = 180
+description = "Price of Example Scale."
+
+[[fact_keys]]
+key = "exscale.seats"
+value_type = "int"
+unit = "seats"
+stale_after_days = 365
+description = "Seats of Example Scale."
+
+[[fact_keys]]
+key = "exscale.max_context"
+value_type = "int"
+unit = "tokens"
+stale_after_days = 365
+description = "Max context of Example Scale."
+
+[[fact_keys]]
+key = "exscale.gpu_memory"
+value_type = "number"
+unit = "GB"
+stale_after_days = 365
+description = "GPU memory of Example Scale."
+
+[[fact_keys]]
+key = "exscale.region"
+value_type = "enum"
+allowed_values = ["au", "eu", "us"]
+stale_after_days = 365
+description = "Region of Example Scale."
+
+[[fact_keys]]
+key = "exscale.sso"
+value_type = "bool"
+value_words = {true = ["included"], false = ["not included"]}
+stale_after_days = 365
+description = "SSO of Example Scale."
+
+[[fact_keys]]
+key = "exscale.support_hours"
+value_type = "int"
+unit = "hours"
+stale_after_days = 365
+description = "Support hours of Example Scale."
+
+[[fact_keys]]
+key = "exscale.retention_days"
+value_type = "int"
+unit = "days"
+stale_after_days = 365
+description = "Retention days of Example Scale."
+
+[[fact_keys]]
+key = "exscale.launch_date"
+value_type = "date"
+stale_after_days = 365
+description = "Launch date of Example Scale."
+
+[[fact_keys]]
+key = "exscale.current_version"
+value_type = "text"
+stale_after_days = 365
+description = "Current version of Example Scale."
+
+[[fact_keys]]
+key = "exedge.price"
+value_type = "number"
+unit = "AUD"
+stale_after_days = 180
+description = "Price of Example Edge."
+
+[[fact_keys]]
+key = "exedge.seats"
+value_type = "int"
+unit = "seats"
+stale_after_days = 365
+description = "Seats of Example Edge."
+
+[[fact_keys]]
+key = "exedge.max_context"
+value_type = "int"
+unit = "tokens"
+stale_after_days = 365
+description = "Max context of Example Edge."
+
+[[fact_keys]]
+key = "exedge.gpu_memory"
+value_type = "number"
+unit = "GB"
+stale_after_days = 365
+description = "GPU memory of Example Edge."
+
+[[fact_keys]]
+key = "exedge.region"
+value_type = "enum"
+allowed_values = ["au", "eu", "us"]
+stale_after_days = 365
+description = "Region of Example Edge."
+
+[[fact_keys]]
+key = "exedge.sso"
+value_type = "bool"
+value_words = {true = ["included"], false = ["not included"]}
+stale_after_days = 365
+description = "SSO of Example Edge."
+
+[[fact_keys]]
+key = "exedge.support_hours"
+value_type = "int"
+unit = "hours"
+stale_after_days = 365
+description = "Support hours of Example Edge."
+
+[[fact_keys]]
+key = "exedge.retention_days"
+value_type = "int"
+unit = "days"
+stale_after_days = 365
+description = "Retention days of Example Edge."
+
+[[fact_keys]]
+key = "exedge.launch_date"
+value_type = "date"
+stale_after_days = 365
+description = "Launch date of Example Edge."
+
+[[fact_keys]]
+key = "exedge.current_version"
+value_type = "text"
+stale_after_days = 365
+description = "Current version of Example Edge."
+
+[[fact_keys]]
+key = "exstudio.price"
+value_type = "number"
+unit = "AUD"
+stale_after_days = 180
+description = "Price of Example Studio."
+
+[[fact_keys]]
+key = "exstudio.seats"
+value_type = "int"
+unit = "seats"
+stale_after_days = 365
+description = "Seats of Example Studio."
+
+[[fact_keys]]
+key = "exstudio.max_context"
+value_type = "int"
+unit = "tokens"
+stale_after_days = 365
+description = "Max context of Example Studio."
+
+[[fact_keys]]
+key = "exstudio.gpu_memory"
+value_type = "number"
+unit = "GB"
+stale_after_days = 365
+description = "GPU memory of Example Studio."
+
+[[fact_keys]]
+key = "exstudio.region"
+value_type = "enum"
+allowed_values = ["au", "eu", "us"]
+stale_after_days = 365
+description = "Region of Example Studio."
+
+[[fact_keys]]
+key = "exstudio.sso"
+value_type = "bool"
+value_words = {true = ["included"], false = ["not included"]}
+stale_after_days = 365
+description = "SSO of Example Studio."
+
+[[fact_keys]]
+key = "exstudio.support_hours"
+value_type = "int"
+unit = "hours"
+stale_after_days = 365
+description = "Support hours of Example Studio."
+
+[[fact_keys]]
+key = "exstudio.retention_days"
+value_type = "int"
+unit = "days"
+stale_after_days = 365
+description = "Retention days of Example Studio."
+
+[[fact_keys]]
+key = "exstudio.launch_date"
+value_type = "date"
+stale_after_days = 365
+description = "Launch date of Example Studio."
+
+[[fact_keys]]
+key = "exstudio.current_version"
+value_type = "text"
+stale_after_days = 365
+description = "Current version of Example Studio."
+
+[[fact_keys]]
+key = "exvault.price"
+value_type = "number"
+unit = "AUD"
+stale_after_days = 180
+description = "Price of Example Vault."
+
+[[fact_keys]]
+key = "exvault.seats"
+value_type = "int"
+unit = "seats"
+stale_after_days = 365
+description = "Seats of Example Vault."
+
+[[fact_keys]]
+key = "exvault.max_context"
+value_type = "int"
+unit = "tokens"
+stale_after_days = 365
+description = "Max context of Example Vault."
+
+[[fact_keys]]
+key = "exvault.gpu_memory"
+value_type = "number"
+unit = "GB"
+stale_after_days = 365
+description = "GPU memory of Example Vault."
+
+[[fact_keys]]
+key = "exvault.region"
+value_type = "enum"
+allowed_values = ["au", "eu", "us"]
+stale_after_days = 365
+description = "Region of Example Vault."
+
+[[fact_keys]]
+key = "exvault.sso"
+value_type = "bool"
+value_words = {true = ["included"], false = ["not included"]}
+stale_after_days = 365
+description = "SSO of Example Vault."
+
+[[fact_keys]]
+key = "exvault.support_hours"
+value_type = "int"
+unit = "hours"
+stale_after_days = 365
+description = "Support hours of Example Vault."
+
+[[fact_keys]]
+key = "exvault.retention_days"
+value_type = "int"
+unit = "days"
+stale_after_days = 365
+description = "Retention days of Example Vault."
+
+[[fact_keys]]
+key = "exvault.launch_date"
+value_type = "date"
+stale_after_days = 365
+description = "Launch date of Example Vault."
+
+[[fact_keys]]
+key = "exvault.current_version"
+value_type = "text"
+stale_after_days = 365
+description = "Current version of Example Vault."
+
+[[fact_keys]]
+key = "exscale.pentest_date"
+value_type = "date"
+stale_after_days = 365
+description = "Not yet recorded."
+
+[[fact_keys]]
+key = "exedge.sla_credit_percent"
+value_type = "number"
+unit = "%"
+stale_after_days = 365
+description = "Not yet recorded."
+
+[agents.loader]
+kind = "collector"
+manual_sources = true
+operations = "*"
+approval = "none"
+approvers = []
+author_principal = false
+
+[agents.owner]
+kind = "collector"
+manual_sources = true
+operations = ["add_source"]
+approval = "none"
+approvers = []
+author_principal = true
+
+[agents.scan]
+kind = "extractor"
+operations = ["apply_candidate", "upsert_decision", "upsert_action", "upsert_thread_link", "add_claim"]
+approval = "verified"
+approvers = ["owner"]
+author_principal = false
+
+[collectors]
+
+[truth.entities]
+excloud = ["Example Cloud"]
+exbasic = ["Example Basic"]
+expro = ["Example Pro"]
+exteam = ["Example Team"]
+exscale = ["Example Scale"]
+exedge = ["Example Edge"]
+exstudio = ["Example Studio"]
+exvault = ["Example Vault"]
+
+[truth.attributes]
+price = ["cost", "price per seat"]
+seats = ["seat count"]
+max_context = ["context window", "context length"]
+gpu_memory = ["VRAM", "GPU memory"]
+region = ["hosting region"]
+sso = ["single sign-on"]
+support_hours = ["support response time"]
+retention_days = ["log retention"]
+launch_date = ["launch date"]
+current_version = ["version"]
+pentest_date = ["penetration test"]
+sla_credit_percent = ["SLA credit"]

@@ -1,0 +1,145 @@
+{
+  "packet_version": 1,
+  "change_id": "assistant-demo-work-1",
+  "agent": "assistant",
+  "intent": "Add the demo people, checklist, actions, thread links and fact",
+  "ops": [
+    {
+      "op": "upsert_person",
+      "base": null,
+      "source": {"source_id": "src-demo-team-note", "locator": "para 1"},
+      "row": {"id": "per-robin-example", "display_name": "Robin Example", "org": "Example Supplies", "role": "Account manager"}
+    },
+    {
+      "op": "upsert_person",
+      "base": null,
+      "source": {"source_id": "src-demo-team-note", "locator": "para 1"},
+      "row": {"id": "per-casey-example", "display_name": "Casey Example", "org": "Example Co", "role": "IT lead"}
+    },
+    {
+      "op": "upsert_checklist_item",
+      "base": null,
+      "source": {"source_id": "src-demo-team-note", "locator": "para 1"},
+      "row": {
+        "id": "chk-demo-access-review",
+        "project_id": "compliance",
+        "section": "Access control",
+        "title": "Quarterly access review",
+        "detail": "Export the user list from every system and confirm each account is still needed.",
+        "state": "waiting",
+        "state_basis": "reported",
+        "owner_person_id": "per-alex-example",
+        "waiting_on_person_id": "per-casey-example",
+        "land_by": "2026-10-15",
+        "sort_order": 10,
+        "last_verified_at": "2026-09-28T00:00:00Z"
+      }
+    },
+    {
+      "op": "upsert_checklist_item",
+      "base": null,
+      "source": {"source_id": "src-demo-team-note", "locator": "para 1"},
+      "row": {
+        "id": "chk-demo-vendor-review",
+        "project_id": "compliance",
+        "section": "Vendors",
+        "title": "Annual vendor risk review",
+        "state": "in_progress",
+        "state_basis": "reported",
+        "owner_person_id": "per-alex-example",
+        "land_by": "2026-11-30",
+        "sort_order": 20,
+        "last_verified_at": "2026-09-28T00:00:00Z"
+      }
+    },
+    {
+      "op": "upsert_checklist_item",
+      "base": null,
+      "source": {"source_id": "src-demo-team-note", "locator": "para 1"},
+      "row": {
+        "id": "chk-demo-backup-test",
+        "project_id": "compliance",
+        "section": "Operations",
+        "title": "Backup restore test",
+        "state": "done",
+        "state_basis": "reported",
+        "owner_person_id": "per-casey-example",
+        "sort_order": 30,
+        "last_verified_at": "2026-09-28T00:00:00Z"
+      }
+    },
+    {
+      "op": "upsert_action",
+      "base": null,
+      "source": {"source_id": "src-demo-mail-triage", "locator": "para 1"},
+      "row": {
+        "id": "act-demo-reply-renewal",
+        "title": "Reply to Robin Example about the 2027 renewal quote",
+        "next_step": "Confirm the seat count and return the signed quote.",
+        "status": "open",
+        "status_basis": "reported",
+        "project_id": "sales",
+        "owner_person_id": "per-alex-example",
+        "asked_on": "2026-09-14",
+        "last_verified_at": "2026-09-28T00:00:00Z"
+      }
+    },
+    {
+      "op": "upsert_action",
+      "base": null,
+      "source": {"source_id": "src-demo-mail-triage", "locator": "para 1"},
+      "row": {
+        "id": "act-demo-reply-onboarding",
+        "title": "Reply to Robin Example about the onboarding checklist",
+        "status": "done",
+        "status_basis": "reported",
+        "project_id": "sales",
+        "owner_person_id": "per-alex-example",
+        "asked_on": "2026-09-02",
+        "closed_at": "2026-09-03T08:05:00Z",
+        "close_reason": "Answered in the thread.",
+        "last_verified_at": "2026-09-28T00:00:00Z"
+      }
+    },
+    {
+      "op": "upsert_thread_link",
+      "base": null,
+      "source": {"source_id": "src-demo-mail-triage", "locator": "para 1"},
+      "row": {
+        "id": "lnk-demo-renewal",
+        "action_id": "act-demo-reply-renewal",
+        "thread_id": "thr-email-0751bf538c7dc6a6429b76d3",
+        "role": "owes_reply",
+        "since": "2026-09-14T09:12:00Z",
+        "status": "active"
+      }
+    },
+    {
+      "op": "upsert_thread_link",
+      "base": null,
+      "source": {"source_id": "src-demo-mail-triage", "locator": "para 1"},
+      "row": {
+        "id": "lnk-demo-onboarding",
+        "action_id": "act-demo-reply-onboarding",
+        "thread_id": "thr-email-97b4d72ac09f690c6f953151",
+        "role": "owes_reply",
+        "since": "2026-09-02T16:40:00Z",
+        "status": "active"
+      }
+    },
+    {
+      "op": "upsert_fact",
+      "base": null,
+      "source": {"source_id": "src-demo-setup-note", "locator": "para 1"},
+      "row": {
+        "key": "vendor.compliance.instance",
+        "value": "eu",
+        "basis": "reported",
+        "as_of": "2026-09-30",
+        "last_verified_at": "2026-09-30T00:00:00Z",
+        "quote": "workspace runs on the EU regional instance",
+        "value_raw": "EU"
+      }
+    }
+  ]
+}

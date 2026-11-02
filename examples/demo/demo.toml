@@ -1,0 +1,68 @@
+# Demo instance. Every name, host, date and value here is invented.
+# Build it with these steps (tests/test_demo_instance.py runs them): brain init demo --principal "Alex Example"
+# --timezone UTC, copy this file over <instance>/brain.toml, brain apply-config, brain apply packets/1-notes.json,
+# brain collect --fixture fixtures/mail.json mail, then brain apply packets/2-work.json.
+
+[instance]
+name = "demo"
+timezone = "UTC"
+org = "Example Co"
+
+[principal]
+person_id = "per-alex-example"
+display_name = "Alex Example"
+names = ["Alex"]
+aliases = []
+
+[[workstreams]]
+id = "general"
+title = "General"
+description = "Default workstream."
+sort_order = 100
+
+[[workstreams]]
+id = "compliance"
+title = "Compliance"
+description = "The audit checklist and the compliance platform."
+sort_order = 200
+
+[[workstreams]]
+id = "sales"
+title = "Sales"
+description = "Customer and supplier email that needs a reply."
+sort_order = 300
+
+[[fact_keys]]
+key = "vendor.compliance.instance"
+value_type = "enum"
+allowed_values = ["au", "eu", "us"]
+unit = ""
+stale_after_days = 3650
+description = "Regional instance of the compliance platform this company uses."
+
+[agents.assistant]
+kind = "agent"
+operations = "*"
+approval = "none"
+approvers = []
+author_principal = false
+
+[agents.notes]
+kind = "collector"
+manual_sources = true
+operations = ["add_source"]
+approval = "none"
+approvers = []
+author_principal = false
+
+[agents.mail]
+kind = "collector"
+operations = ["add_source", "upsert_thread", "record_collector_run"]
+approval = "none"
+approvers = []
+author_principal = false
+
+[collectors.mail]
+type = "gmail"
+agent = "mail"
+account = "mail"

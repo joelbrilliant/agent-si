@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "a1": {
+    "exampleco": {"budget": 10633, "ceiling": 11000},
+    "demo": {"budget": 9024, "ceiling": 10000}
+  },
+  "a2": {"router_max": 2048, "router_base_bytes": 2002, "router_notes_off_saving": 4, "router_template_bytes": 1935, "brief_max": 4096, "brief_lines_max": 40, "disputed_key_max": 2048, "prefix_item_bytes": 1136, "prefix_page_bytes": 11360},
+  "a3": {
+    "tools_list": 6139,
+    "tools": {"brief": 410, "search": 947, "get": 744, "fact_get": 2004, "records_query": 1143, "signals": 874}
+  },
+  "a5": {
+    "q01": {"calls": 1, "bytes": 1258},
+    "q02": {"calls": 1, "bytes": 792},
+    "q03": {"calls": 1, "bytes": 263},
+    "q04": {"calls": 2, "bytes": 6216},
+    "q05": {"calls": 1, "bytes": 664},
+    "q06": {"calls": 1, "bytes": 892},
+    "q07": {"calls": 1, "bytes": 1146},
+    "q08": {"calls": 1, "bytes": 584},
+    "q09": {"calls": 1, "bytes": 532},
+    "q10": {"calls": 1, "bytes": 2578},
+    "q11": {"calls": 1, "bytes": 1092},
+    "q12": {"calls": 1, "bytes": 550},
+    "q13": {"calls": 1, "bytes": 1272},
+    "q14": {"calls": 1, "bytes": 1118},
+    "q15": {"calls": 1, "bytes": 180},
+    "q16": {"calls": 1, "bytes": 1332},
+    "q17": {"calls": 1, "bytes": 1750},
+    "q18": {"calls": 1, "bytes": 1742},
+    "q19": {"calls": 1, "bytes": 1822},
+    "q20": {"calls": 1, "bytes": 1876},
+    "q21": {"calls": 2, "bytes": 3352},
+    "q22": {"calls": 1, "bytes": 1698},
+    "q23": {"calls": 1, "bytes": 754},
+    "q24": {"calls": 2, "bytes": 3480}
+  },
+  "a7": {"repeats": 20, "p95_ms": 50},
+  "changelog": [
+    {"date": "2026-10-11", "phase": "1c", "note": "First budgets, measured on the generated instance", "fingerprint": "92829c819b7be7aa2a9145322e994a4310f14a8ecb98c0455dd0e293156be922"},
+    {"date": "2026-10-14", "phase": "folders", "note": "records_query describes under: tools/list 6,076 to 6,122 bytes, records_query 1,077 to 1,123", "fingerprint": "b4004d03f4aaa9fa2832d9c3e23528ee4999062061ff0560ad38b8a3137874c0"},
+    {"date": "2026-10-17", "phase": "correct", "note": "ROUTER.md sizes move here from six test files: 2,002 bytes plus the instance name, 4 fewer with notes off, template 1,935", "fingerprint": "c98bbe00125b0ea4d22f74fefb28774cd3aaf89af4bc627ade5969ad2506aab7"},
+    {"date": "2026-10-17", "phase": "correct", "note": "search falls back to any word when no hit has every word: tools/list 6,122 to 6,142 bytes, search 977 to 997", "fingerprint": "d76f93923ac742c7c58d238c102d21d49b83ab34d164d0b2ccd83b51fe5f932a"},
+    {"date": "2026-10-25", "phase": "links", "note": "brief and search take under, records_query cites, get lists sources and cited_by; descriptions trimmed to pay: tools/list 6,142 to 6,132 bytes, brief 369 to 410, search 997 to 940, get 741 to 744, fact_get 2,021 to 2,004, records_query 1,123 to 1,143; get adds related.sources and source cited_by: q04 2,588 to 2,816, q21 3,278 to 3,352, q24 3,406 to 3,480", "fingerprint": "86e463ae9f75dd7fbfbc8a4ea8999977eabbe3f4306077e708fec5d06f7cd4b0"},
+    {"date": "2026-10-29", "phase": "any-word", "note": "1.11.0 ranks every search by any word, and search's description says so: tools/list 6,132 to 6,139 bytes, search 940 to 947. q04's search returns 10 hits instead of 1, 2,816 to 6,216 bytes", "fingerprint": "643abe0d1e70941525a5912f24fa0d9443ba236390f29f492e9f3a81fed52159"}
+  ]
+}

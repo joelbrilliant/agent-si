@@ -1,0 +1,8 @@
+{$BRAIN_HOST} {
+    request_body {
+        max_size 6MB
+    }
+    reverse_proxy brain:8080
+    header -Server
+    header Strict-Transport-Security "max-age=31536000"
+}

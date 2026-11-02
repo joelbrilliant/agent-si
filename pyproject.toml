@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-si"
+dynamic = ["version"]
+description = "agent-si: a sourced, checkable memory for AI agents, in one local SQLite file."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{name = "Joel Brilliant"}]
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+pdf = ["pypdf==6.19.0"]
+test = ["pytest>=8", "pypdf==6.19.0"]
+
+[project.urls]
+Homepage = "https://github.com/joelbrilliant/agent-si"
+
+[project.scripts]
+brain = "brain.cli:main"
+brain-fetch = "brain_fetch.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "brain.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+brain = ["migrations/*.sql", "templates/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning"]
