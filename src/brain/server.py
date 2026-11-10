@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -9,6 +10,7 @@ import brain
 from brain import __version__
 from brain import ingress, reads, store
 from brain.config import load_config
+from brain.sessions import asking_session
 
 SUPPORTED_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
 LATEST_VERSION = "2025-11-25"
@@ -214,7 +216,8 @@ def _call_tool(instance_dir: Path, params, ident, version: str, now: str | None,
 
     began = time.perf_counter()
     try:
-        result = reads.run_tool(instance_dir, name, arguments, now=now, folders=getattr(started, "folders", None))
+        result = reads.run_tool(instance_dir, name, arguments, now=now, folders=getattr(started, "folders", None),
+                                local=True, asking=asking_session(os.environ))
     except reads.UnknownTool:
         return _error(ident, -32602, f"Unknown tool: {name}")
     if started is not None and started.record:
@@ -258,6 +261,20 @@ def _initialize_result(instance_dir: Path, version: str, now: str | None = None,
 BRIEF_MAX = 8000
 
 
+# The pointer every connected agent reads: memory lives here, so it isn't kept in notes files.
+SESSIONS_RULE = (
+    "What was said in past sessions is recorded and in search, so search before saying you don't remember, "
+    "and don't keep memory notes in files."
+)
+
+
+def _records_sessions(instance_dir: Path) -> bool:
+    try:
+        return load_config(Path(instance_dir) / "brain.toml").sessions.record
+    except Exception:  # noqa: BLE001 - the handshake never fails over the config; the tools report the problem
+        return False
+
+
 def _instructions(instance_dir: Path, name: str, now: str | None = None, folders=None) -> str:
     """The handshake text. A folder token (1.12.0) is told its folders, gets the brief over them, and is pointed at search
     and records_query, since facts aren't shown to it."""
@@ -267,6 +284,8 @@ def _instructions(instance_dir: Path, name: str, now: str | None = None, folders
             "Use fact_get for facts and records_query for records. "
             "Changes go through change packets and brain apply, never through this server."
         )
+        if _records_sessions(instance_dir):
+            rules += " " + SESSIONS_RULE
     else:
         lead = f"Read-only tools for the {name} brain, limited to the folders {', '.join(folders)}."
         rules = (

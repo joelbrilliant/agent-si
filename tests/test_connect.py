@@ -120,12 +120,29 @@ def test_connect_all_uses_each_tools_own_command(tmp_path, monkeypatch) -> None:
     assert cursor == {"mcpServers": {name: {"type": "stdio", "command": brain, "args": ["serve", "--instance", target]}}}
     assert (results["claude"]["instructions"], results["grok"]["instructions"]) == ("not needed", "added")
     assert results["hermes"]["instructions"].startswith(f"add this line to {home / '.hermes' / 'AGENTS.md'}")
-    assert (home / ".grok" / "AGENTS.md").read_text() == "# Grok rules\nCall the brain's brief tool first. <!-- agent-si:brain-demo -->\n"
+    assert (home / ".grok" / "AGENTS.md").read_text() == (
+        "# Grok rules\nCall the brain's brief tool first, and search it before saying you don't remember. "
+        "Keep no memory notes in files. <!-- agent-si:brain-demo -->\n"
+    )
     # Again: nothing changes, and Grok, which sees the server already, isn't asked to add it twice.
     before = len(_calls(home))
     again = {item["harness"]: item["status"] for item in connect.connect(inst, ["claude", "grok", "cursor"], yes=True)}
     assert again == {"claude": "unchanged", "grok": "unchanged", "cursor": "unchanged"}
     assert not [call for call in _calls(home)[before:] if call[1:3] == ["mcp", "add"]]
+
+
+def test_remove_takes_out_the_line_an_earlier_version_added(tmp_path, monkeypatch) -> None:
+    world, home, inst = _world(tmp_path, monkeypatch)
+    rules = home / ".grok" / "AGENTS.md"
+    rules.parent.mkdir()
+    earlier = "Call the brain's brief tool first. <!-- agent-si:brain-demo -->"
+    for before, after in (("# Grok rules\n" + earlier + "\n", "# Grok rules\n"), ("# Grok rules\n" + earlier, "# Grok rules"),
+                          ("# Grok rules\n" + earlier + "\nMore rules\n", "# Grok rules\nMore rules\n")):
+        rules.write_text(before)
+        connect.connect(inst, ["grok"], yes=True)
+        assert rules.read_text() == before  # the mark is there, so nothing is added twice
+        connect.connect(inst, ["grok"], remove=True, yes=True)
+        assert rules.read_text() == after
 
 
 def test_remove_takes_out_exactly_what_was_added(tmp_path, monkeypatch) -> None:

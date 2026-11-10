@@ -20,6 +20,8 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from brain import advice, connect as connect_mod, init as init_mod, registry
+from brain import sessions as sessions_mod
+from brain.config import load_config
 from brain.guided import local_zone
 from brain.init import InitError, init_instance
 from brain.schemas import PROJECT_ID
@@ -39,6 +41,7 @@ class Options:
     dir: str = DEFAULT_DIR
     timezone: str | None = None
     no_connect: bool = False
+    no_sessions: bool = False
 
 
 def _valid_principal(name: str) -> bool:
@@ -166,6 +169,8 @@ def run(options: Options, *, out=None, terminal=_TERMINAL) -> dict:
                   "  No name given, so the evidence gate's rule about your own words is off. Add one later with brain apply-config.\n")
     for note in notes:
         out.write(f"  {note}\n")
+    if options.no_sessions:
+        _sessions_off(Path(instance), kept, out)
 
     connected: list[dict] = []
     if options.no_connect:
@@ -182,8 +187,22 @@ def run(options: Options, *, out=None, terminal=_TERMINAL) -> dict:
             for item in connected:
                 _report(item, brain, instance, out)
     ok = all(item["status"] != "failed" and item["smoke"] != "fail" for item in connected)
+    recorded = sessions_mod.summary(instance, load_config(Path(instance) / "brain.toml"))
+    out.write(sessions_mod.summary_line(recorded) + "\n")
     out.flush()
-    return {"instance": instance, "created": not kept, "connected": connected, "ok": ok}
+    return {"instance": instance, "created": not kept, "connected": connected, "ok": ok, "sessions": recorded}
+
+
+def _sessions_off(instance: Path, kept: bool, out) -> None:
+    """--no-sessions: a new brain starts with recording off. An existing brain's settings file is left alone."""
+    config = instance / "brain.toml"
+    if kept:
+        if load_config(config).sessions.record:
+            out.write("  --no-sessions changes a new brain only. To stop recording here, set record = false under "
+                      "[sessions] in brain.toml.\n")
+        return
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write("\n[sessions]\nrecord = false\n")
 
 
 def _report(item: dict, brain: str, instance: str, out) -> None:

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from brain import advice
+from brain.sessions import cite as session_cite
 from brain import candidates
 from brain import config as config_mod
 from brain import evidence_gate
@@ -1162,6 +1163,11 @@ class Applier:
             else:
                 if str(row.get("external_ref", "")).startswith(evidence_gate.SPEAKER_LINES):
                     err = self._speaker_lines_error(row)
+                    if err:
+                        return f"op {label} ({name}): {err}"
+                if session_cite.is_excerpt(row):
+                    # A session excerpt is stored only when it is exactly what the session record holds.
+                    err = session_cite.check(self.instance_dir, self.config, row)
                     if err:
                         return f"op {label} ({name}): {err}"
                 if row.get("supersedes_id") is not None:

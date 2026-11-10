@@ -227,7 +227,19 @@ def _cursor(item: Entry, remove: bool, yes: bool, ask) -> dict:
 # -- the marked "Call brief first" line -------------------------------------------------------------------------
 
 def _line(item: Entry) -> str:
-    return f"Call the brain's brief tool first. {MARK.format(name=item.name)}"
+    return (
+        "Call the brain's brief tool first, and search it before saying you don't remember. "
+        f"Keep no memory notes in files. {MARK.format(name=item.name)}"
+    )
+
+
+def _marked_line(text: str, mark: str) -> str | None:
+    """The whole line holding the mark, as this or an earlier version wrote it."""
+    at = text.find(mark)
+    if at < 0:
+        return None
+    start = text.rfind("\n", 0, at) + 1
+    return text[start : at + len(mark)]
 
 
 def instructions(harness: str, item: Entry, remove: bool, yes: bool, ask) -> str:
@@ -244,6 +256,7 @@ def instructions(harness: str, item: Entry, remove: bool, yes: bool, ask) -> str
     text = path.read_bytes().decode("utf-8", errors="surrogateescape")
     full = _line(item)
     if remove:
+        full = _marked_line(text, mark) or full
         # Exactly what adding wrote comes out: the line and its newline, or, after a file that didn't end in one,
         # the newline before it. So the file is byte-identical to before.
         if text.endswith("\n" + full):

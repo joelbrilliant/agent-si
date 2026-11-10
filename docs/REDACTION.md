@@ -16,6 +16,14 @@ you to type the id. `--yes` skips the question (an agent must pass it). On a hub
 - Every version of the item is redacted together, because a changed document keeps its older versions.
 - `--backups DIR` (repeatable) names more folders of bundles for it to clean. Each must already exist. If the command stops and you run it again, pass the same folders.
 
+## Past sessions
+
+`brain redact` works on the brain. The session record (`sessions.sqlite3` in the instance folder) holds what was said
+in agent sessions, and redact doesn't touch it. To remove a session from the record, run
+`brain sessions forget <session id>` (the id is on each `search` result, such as `claude:0f3a...`). It doesn't come
+back on a later sync. A session excerpt already stored in the brain is a source like any other, so `brain redact` on
+its id removes that copy. The agent tool's own transcript file is the tool's to delete.
+
 ## What it does
 
 1. Replaces the source with a tombstone (`redacted on <date> by <you>: <reason>`). The id, the date and the item's

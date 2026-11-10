@@ -26,6 +26,7 @@ from brain.config import ConfigError, load_config
 from brain.init import InitError, apply_config, init_instance, search_rebuild
 from brain.migrate import MigrationError, latest_version, migrate
 from brain.schemas import UPSERT_TABLES
+from brain.sessions import asking_session as sessions_asking
 
 
 
@@ -131,7 +132,7 @@ def _cmd_setup(ns) -> int:
     from brain import connect, setup
 
     options = setup.Options(yes=ns.yes, principal=ns.principal, name=ns.name, dir=ns.dir, timezone=ns.timezone,
-                            no_connect=ns.no_connect)
+                            no_connect=ns.no_connect, no_sessions=ns.no_sessions)
     try:
         result = setup.run(options)
     except connect.ConnectError as exc:
@@ -156,7 +157,15 @@ def _cmd_connect(ns) -> int:
                                       yes=ns.yes, ask=ask)
     except connect.ConnectError as exc:
         raise Unavailable(str(exc)) from None
-    _print_json({"results": results})
+    payload = {"results": results}
+    if not ns.url and not ns.print_only and not ns.remove:
+        # Connecting is when a person first meets the brain, so the record of past sessions is built now, not on
+        # the first search.
+        from brain import sessions as sessions_mod
+
+        instance = _instance_dir(ns)
+        payload["sessions"] = sessions_mod.summary(instance, load_config(instance / "brain.toml"))
+    _print_json(payload)
     return 1 if any(item["status"] == "failed" or item["smoke"] == "fail" for item in results) else 0
 
 
@@ -213,7 +222,8 @@ def _cmd_read(ns) -> int:
     if url:
         return _over_hub(url, "POST", f"/v1/read/{ns.tool}", json.dumps(arguments).encode())
     try:
-        result = reads.run_tool(_instance_dir(ns), ns.tool, arguments)
+        result = reads.run_tool(_instance_dir(ns), ns.tool, arguments, local=True,
+                                asking=sessions_asking(os.environ))
     except reads.UnknownTool as exc:
         print(f"brain: unknown tool {exc.name}", file=sys.stderr)
         return 2
@@ -595,6 +605,61 @@ def _cmd_usage(ns) -> int:
     return 0
 
 
+def _cmd_sessions(ns) -> int:
+    """brain sessions: the record of past agent sessions beside the brain. status and sync print counts only."""
+    from brain import advice
+    from brain import sessions as sessions_mod
+    from brain.config import load_config
+    from brain.sessions import record
+
+    instance = _instance_dir(ns)
+    cfg = load_config(instance / "brain.toml")
+    db = record.path_for(instance)
+    if ns.action == "status":
+        _print_json({"record": cfg.sessions.record, "file": str(db), **record.status(db)})
+        return 0
+    if ns.action == "sync":
+        if not cfg.sessions.record:
+            message = advice.sessions_off_error()
+            _print_json({"status": "off", "message": message})
+            print(f"brain: {message}", file=sys.stderr)
+            return 1
+        result = sessions_mod.refresh(instance, cfg)
+        not_installed = sorted({e["harness"] for e in result.errors if e["error"] == "FileNotFoundError"})
+        _print_json(
+            {
+                "status": "busy" if result.busy else "synced",
+                "sessions": result.sessions,
+                "new_sessions": result.new_sessions,
+                "new_messages": result.new_messages,
+                "skipped_secret": result.skipped_secret,
+                "seconds": round(result.seconds, 2),
+                "no_store_found": not_installed,
+                "errors": [e for e in result.errors if e["error"] != "FileNotFoundError"],
+            }
+        )
+        return 0
+    # search shows a session with a message number on the end (claude:0f3a...#12). These commands act on the
+    # session, so the number is dropped.
+    place = record.parse_place(ns.session)
+    if place is None:
+        raise Unreadable(advice.session_ref_error(ns.session))
+    ref = place[:2]
+    session = record.session_ref(*ref)
+    if ns.action == "excerpt":
+        from brain.sessions import cite
+
+        try:
+            _print_json(cite.excerpt_op(instance, cfg, session, ns.first, ns.last, ns.id))
+        except cite.CiteError as exc:
+            raise Unreadable(str(exc)) from None
+        return 0
+    # forget
+    removed = record.forget(db, *ref)
+    _print_json({"status": "forgotten", "session": session, "messages_removed": removed})
+    return 0
+
+
 def _cmd_schedule(ns) -> int:
     from brain import advice, update_schedule
 
@@ -701,6 +766,7 @@ def _build_parser() -> argparse.ArgumentParser:
     setup_p.add_argument("--dir", default="~/Brains")
     setup_p.add_argument("--timezone", default=None)
     setup_p.add_argument("--no-connect", action="store_true")
+    setup_p.add_argument("--no-sessions", action="store_true", help="start with past-session recording off")
     setup_p.set_defaults(func=_cmd_setup)
 
     migrate_p = subs.add_parser("migrate")
@@ -811,6 +877,22 @@ def _build_parser() -> argparse.ArgumentParser:
     usage_p.add_argument("--period", choices=("week", "month"), default="week")
     usage_p.add_argument("--instance")
     usage_p.set_defaults(func=_cmd_usage)
+
+    sessions_p = subs.add_parser("sessions")
+    sessions_subs = sessions_p.add_subparsers(dest="action", required=True)
+    for action in ("status", "sync"):
+        sub = sessions_subs.add_parser(action)
+        sub.add_argument("--instance")
+    forget_p = sessions_subs.add_parser("forget")
+    forget_p.add_argument("session", help="a session id as search shows it, such as claude:0f3a...")
+    forget_p.add_argument("--instance")
+    excerpt_p = sessions_subs.add_parser("excerpt")
+    excerpt_p.add_argument("session", help="a session id as search shows it")
+    excerpt_p.add_argument("--from", dest="first", type=int, required=True, help="the first message's number")
+    excerpt_p.add_argument("--to", dest="last", type=int, required=True, help="the last message's number")
+    excerpt_p.add_argument("--id", default=None, help="the source id to use, starting src-")
+    excerpt_p.add_argument("--instance")
+    sessions_p.set_defaults(func=_cmd_sessions)
 
     connect_p = subs.add_parser("connect")
     connect_p.add_argument("harnesses", nargs="+", metavar="HARNESS")

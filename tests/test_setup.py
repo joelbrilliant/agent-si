@@ -247,3 +247,43 @@ def test_a_detected_zone_with_no_data_falls_back_to_utc(tmp_path, monkeypatch, c
     out = capsys.readouterr().out
     assert "Not/AZone" in out and "UTC" in out
     assert 'timezone = "UTC"' in (tmp_path / "my-brains" / "work" / "brain.toml").read_text()
+
+
+def test_setup_records_past_sessions_and_says_how_to_stop(tmp_path, monkeypatch, capsys) -> None:
+    from tests.test_sessions_record import claude_row, jsonl
+
+    _world(tmp_path, monkeypatch)
+    root = tmp_path / "claude-projects"
+    jsonl(root / "-work" / "claude-first.jsonl", [
+        claude_row("a1", "user", "setupcanary where do the seed trays go", 1_800_000_000, session="claude-first"),
+        claude_row("a2", "assistant", "On the north bench, out of the wind.", 1_800_000_060, session="claude-first"),
+    ])
+    monkeypatch.setenv("CLAUDE_PROJECTS_ROOT", str(root))
+    assert main(_args(tmp_path, "--yes")) == 0
+    out = capsys.readouterr().out
+    instance = tmp_path / "my-brains" / "work"
+    assert f"Past sessions: 1 recorded (2 messages from claude), in {instance / 'sessions.sqlite3'}." in out
+    assert "record = false under [sessions] in brain.toml" in out and "brain sessions forget <session id>" in out
+    assert (instance / "sessions.sqlite3").is_file()
+    assert "[sessions]" not in (instance / "brain.toml").read_text()
+
+
+def test_setup_no_sessions_starts_with_recording_off(tmp_path, monkeypatch, capsys) -> None:
+    from tests.test_sessions_record import claude_row, jsonl
+
+    _world(tmp_path, monkeypatch)
+    root = tmp_path / "claude-projects"
+    jsonl(root / "-work" / "claude-first.jsonl", [
+        claude_row("a1", "user", "setupcanary where do the seed trays go", 1_800_000_000, session="claude-first"),
+    ])
+    monkeypatch.setenv("CLAUDE_PROJECTS_ROOT", str(root))
+    assert main(_args(tmp_path, "--yes", "--no-sessions")) == 0
+    out = capsys.readouterr().out
+    instance = tmp_path / "my-brains" / "work"
+    assert "Past sessions: not recorded." in out and "record = true under [sessions]" in out
+    assert (instance / "brain.toml").read_text().endswith("\n[sessions]\nrecord = false\n")
+    assert not (instance / "sessions.sqlite3").exists()
+    # Run again without the flag: the existing brain's choice stays.
+    assert main(_args(tmp_path, "--yes")) == 0
+    assert "Past sessions: not recorded." in capsys.readouterr().out
+    assert not (instance / "sessions.sqlite3").exists()

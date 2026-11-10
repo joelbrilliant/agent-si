@@ -42,6 +42,8 @@ def outcome(tool: str, result) -> tuple[str, int]:
     structured = result.structured if isinstance(result.structured, dict) else {}
     if tool in _ROW_KEYS:
         rows = len(structured.get(_ROW_KEYS[tool]) or [])
+        if tool == "search":
+            rows += len(structured.get("sessions") or [])
     elif tool == "get":
         rows = 1 if structured.get("row") else 0
     else:

@@ -1,6 +1,6 @@
 # agent-si
 
-agent-si gives your AI agents a memory they can check: every fact they read comes with the source it was quoted from, kept in one SQLite file on your own machine. Built by Joel Brilliant, with the help of my agents. Apache-2.0.
+agent-si gives your AI agents a memory they can check. Every fact they read comes with the source it was quoted from, and what was said in past agent sessions is recorded word for word by code, not by a model. One install, one search, all in SQLite files on your own machine. Built by Joel Brilliant, with the help of my agents. Apache-2.0.
 
 ## Install
 
@@ -10,7 +10,7 @@ One command, on macOS or Linux (x86_64 or arm64):
 curl -LO https://github.com/joelbrilliant/agent-si/releases/latest/download/install-agent-si.sh && sh install-agent-si.sh
 ```
 
-It asks one question, your name. Then it installs [uv](https://docs.astral.sh/uv/) if you don't have it, installs agent-si and [agent-memory](https://github.com/joelbrilliant/agent-memory) (a second tool, by the same author, that searches your own notes and your past agent sessions), makes your first brain, connects every agent tool it finds (Claude Code, Codex CLI, Gemini CLI, Grok Build, Hermes, Cursor) and indexes your past agent sessions once. It prints how to undo each step. Read the file first if you like: the top is plain `sh`, and below a marker line it carries the two wheels and their SHA-256 sums, which it checks before it installs anything. Flags: `--yes` (ask nothing), `--principal NAME`, `--name NAME`, `--dir FOLDER`, `--timezone ZONE`, `--no-connect` (change no agent tool's settings).
+It asks one question, your name. Then it installs [uv](https://docs.astral.sh/uv/) if you don't have it, installs agent-si, makes your first brain, connects every agent tool it finds (Claude Code, Codex CLI, Gemini CLI, Grok Build, Hermes, Cursor) and records your past agent sessions (Claude Code, Codex, Grok and Hermes) in a file beside the brain. It prints how to undo each step. Read the file first if you like: the top is plain `sh`, and below a marker line it carries the wheel and its SHA-256 sum, which it checks before it installs anything. Flags: `--yes` (ask nothing), `--principal NAME`, `--name NAME`, `--dir FOLDER`, `--timezone ZONE`, `--no-connect` (change no agent tool's settings), `--no-sessions` (don't record past sessions).
 
 **Or tell your agent.** Paste this into your agent:
 
@@ -29,7 +29,7 @@ Then ask your agent: **read my brain brief.**
 An agent usually starts each session by reading a pile of notes, and has to trust whatever it finds there. agent-si holds the same knowledge as typed, sourced rows, behind six read tools, so an agent reads only what a question needs, and a fact without a real quote from a real source never gets in.
 
 On the invented Example Co benchmark (24 questions about a 40-person company; Tier A, which calls no model; measured on this release, in bytes, not tokens):
-- **Startup:** an agent starts with 10,895 bytes from the brain (the router file, the MCP handshake and the brief), against 117,185 bytes for the same company written as markdown.
+- **Startup:** an agent starts with 11,139 bytes from the brain (the router file, the MCP handshake and the brief), against 117,185 bytes for the same company written as markdown.
 - **Answers:** each of the 24 questions took one or two tool calls and 180 to 6,216 bytes of tool output.
 - **Growth:** with four times the history (scale 4), the markdown grew 4.08 times, to 477,986 bytes, while the brain's startup and every answer stayed exactly the same size.
 - **Reads** are deterministic, byte for byte, and the slowest question's 95th percentile was between 5 and 6 ms on the Mac laptop that measured it (it varies by machine; the test allows 50 ms). Both are tested on every release.
@@ -68,25 +68,33 @@ $ brain apply --instance work claim-1m.json
 
 The second claim quoted a sentence that isn't in the source, so the evidence gate refused it. `brain read fact_get --args '{"key": "pro.max_context"}'` now answers `128k tokens`, with the source, its date and the locator.
 
+## Past sessions
+
+Your agent tools already keep what you and they said. agent-si files that dialogue, word for word, in `sessions.sqlite3` beside the brain: Claude Code, Codex, Grok and Hermes sessions, the user's and the assistant's text, without tool calls or tool output. Code does it, never a model, and nothing leaves your machine.
+
+- **One search.** `search` returns the brain's hits and, beside them, a short `sessions` list with the lines that matched: three sessions as leads, or five with more lines when the brain itself has nothing. `since` and `until` keep to those days, and with no query they list that period's sessions. `get` with `entity: "session"` opens one at the line that matched, a small page at a time.
+- **It keeps what the tool deletes.** A message is added once and never rewritten, so a session stays after the tool removes its own copy (Claude Code's terminal app deletes transcripts after 30 days by default). `brain sessions forget <session id>` removes one and stops it coming back.
+- **A fact can quote a session.** `brain sessions excerpt <session id> --from 12 --to 14` prints a source holding those messages. The applier checks it against the record, so a quote that was really said passes the evidence gate, and a made-up or edited one is refused. An excerpt has no author: a "user" turn can be a pasted email or a system notice, so it never counts as your own words.
+- **One switch.** `[sessions] record = false` in `brain.toml` turns it off, and `--no-sessions` starts a new brain that way. `brain sessions status` shows what is held.
+- **Limits.** A message that looks like it holds a secret (an API key, a private key, `TOKEN=...`) is never stored. The file is readable by your account only. `brain backup` doesn't carry it yet, so copy `sessions.sqlite3` yourself. A folder token and a hub connection never see it.
+
 ## Bring your work in
 
 `brain-fetch` captures text from a documents folder, Gmail, Slack, Google Calendar and GitHub, with read-only access, into sources. `brain-fetch setup gmail` (or `slack`, `calendar`, `github`, `documents`) prints the steps for each. For email and Slack, addresses and phone numbers are replaced before anything is stored, and quoted history, signatures and bot posts are dropped. The engine itself never touches the network.
 
 ## Updates
 
-New releases are on the [releases page](https://github.com/joelbrilliant/agent-si/releases). Nothing in agent-si looks for them, schedules a job or fetches a package by name, so an update happens when you choose. Run `install-agent-si.sh` from the newest release again (it upgrades both tools and keeps your brain), or download the agent-si wheel and run `brain update --from-wheel <wheel>`, which stops writes, takes a backup, upgrades, migrates, checks, and rolls back by itself if anything fails. A running agent tool keeps the old version until you restart it.
+New releases are on the [releases page](https://github.com/joelbrilliant/agent-si/releases). Nothing in agent-si looks for them, schedules a job or fetches a package by name, so an update happens when you choose. Run `install-agent-si.sh` from the newest release again (it upgrades agent-si and keeps your brain and its session record), or download the agent-si wheel and run `brain update --from-wheel <wheel>`, which stops writes, takes a backup, upgrades, migrates, checks, and rolls back by itself if anything fails. A running agent tool keeps the old version until you restart it.
 
 `brain update` doesn't check a signature. Check the installer against the `SHA256SUMS` file on the release page before you run it.
 
 ## Using it with agent memory
 
-[Agent memory](https://github.com/joelbrilliant/agent-memory) is a separate tool, with its own repository. It searches your own notes and your past agent sessions. The installer above installs both. Neither needs the other, and each connects only itself to your tools.
+[Agent memory](https://github.com/joelbrilliant/agent-memory) is a separate tool, with its own repository. Its session search is where agent-si's past sessions came from, and from 1.15.0 the brain records and searches sessions itself, so the installer above installs agent-si alone.
 
-If you use both, they split the work:
-- **agent-si** holds what's true now: facts with their sources, actions, waits and disputes.
-- **Agent memory** holds what happened before: past sessions, notes and lessons.
+You don't need agent memory for past sessions any more. It still searches a list of your own markdown notes, which agent-si doesn't. If an earlier installer put it on your machine it keeps working, and the installer tells you how to remove it: `agent-memory connect all --remove`, then `uv tool uninstall agent-memory`.
 
-Agent memory's tools tell your agent to check the brain for anything current. If agent memory is installed, `brain usage report` also shows each tool's model tokens per session, from agent memory's counts. Without it, those numbers say "unknown".
+If agent memory is installed, `brain usage report` also shows each tool's model tokens per session, from agent memory's counts. Without it, those numbers say "unknown".
 
 ## Troubleshooting
 
@@ -98,30 +106,28 @@ Agent memory's tools tell your agent to check the brain for anything current. If
 
 ## Privacy
 
-Everything stays on your machine: the store, the config, the fetch exports (kept 14 days) and the backups. There's no telemetry and no account. The usage log in `<instance>/usage/` holds counts and enums only, never what was asked or answered, and `[usage] record = false` turns it off. To remove something for good, `brain redact <source id>` replaces the source and scrubs every copy derived from it, then compacts the file. [docs/REDACTION.md](docs/REDACTION.md) lists every other place a copy can live (Time Machine, synced folders, offsite buckets, agent session logs) and how to clear each.
+Everything stays on your machine: the store, the session record, the config, the fetch exports (kept 14 days) and the backups. There's no telemetry and no account. The usage log in `<instance>/usage/` holds counts and enums only, never what was asked or answered, and `[usage] record = false` turns it off. To remove something for good, `brain redact <source id>` replaces the source and scrubs every copy derived from it, then compacts the file. [docs/REDACTION.md](docs/REDACTION.md) lists every other place a copy can live (Time Machine, synced folders, offsite buckets, agent session logs) and how to clear each.
 
 ## Uninstall
 
 ```sh
 brain connect all --remove --yes --instance ~/Brains/work
-agent-memory connect all --remove
 brain schedule off      # only if an earlier version installed a nightly job
 uv tool uninstall agent-si
-uv tool uninstall agent-memory
 ```
 
-Your brains stay where they are (`~/Brains/<name>`). Take a `brain backup` first, then delete the folder, `~/.config/agent-si` and `~/.local/state/agent-si` if you want them gone.
+Your brains stay where they are (`~/Brains/<name>`), each with its session record (`sessions.sqlite3`). Take a `brain backup` first, then delete the folder, `~/.config/agent-si` and `~/.local/state/agent-si` if you want them gone.
 
 ## How it works
 
-Each brain is one SQLite file with one writer, the applier. Agents send change packets; the applier checks each op against the config and the evidence gate (a claim's quote must be in its source) and applies, holds for approval, or refuses it, with a receipt. Collectors turn exported files into sources; extraction is a model running in your own agent tool, whose candidates the brain verifies the same way. Reads go through six tools over MCP (`brief`, `search`, `get`, `fact_get`, `records_query` and `signals`), and the same question always gets the same bytes. [docs/REFERENCE.md](docs/REFERENCE.md) has every command and rule.
+Each brain is one SQLite file with one writer, the applier, and a second file beside it for past sessions, which code fills and no packet writes. Agents send change packets; the applier checks each op against the config and the evidence gate (a claim's quote must be in its source) and applies, holds for approval, or refuses it, with a receipt. Collectors turn exported files into sources; extraction is a model running in your own agent tool, whose candidates the brain verifies the same way. Reads go through six tools over MCP (`brief`, `search`, `get`, `fact_get`, `records_query` and `signals`), and the same question always gets the same bytes. [docs/REFERENCE.md](docs/REFERENCE.md) has every command and rule.
 
 ## Build the installer yourself
 
-The one-file installer is built from a checkout of each repository:
+The one-file installer is built from this checkout:
 
 ```sh
-python3 tools/bundle.py --memory <agent-memory checkout> --out dist/    # prints the file's path, size and SHA-256
+python3 tools/bundle.py --out dist/    # prints the file's path, size and SHA-256
 ```
 
 It writes `install-agent-si.sh` (and a copy named for the version) and a `SHA256SUMS` beside it.

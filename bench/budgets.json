@@ -1,13 +1,13 @@
 {
   "format": 1,
   "a1": {
-    "exampleco": {"budget": 10633, "ceiling": 11000},
-    "demo": {"budget": 9024, "ceiling": 10000}
+    "exampleco": {"budget": 11177, "ceiling": 12000},
+    "demo": {"budget": 10177, "ceiling": 11000}
   },
   "a2": {"router_max": 2048, "router_base_bytes": 2002, "router_notes_off_saving": 4, "router_template_bytes": 1935, "brief_max": 4096, "brief_lines_max": 40, "disputed_key_max": 2048, "prefix_item_bytes": 1136, "prefix_page_bytes": 11360},
   "a3": {
-    "tools_list": 6139,
-    "tools": {"brief": 410, "search": 947, "get": 744, "fact_get": 2004, "records_query": 1143, "signals": 874}
+    "tools_list": 6281,
+    "tools": {"brief": 410, "search": 1041, "get": 792, "fact_get": 2004, "records_query": 1143, "signals": 874}
   },
   "a5": {
     "q01": {"calls": 1, "bytes": 1258},
@@ -42,6 +42,8 @@
     {"date": "2026-10-17", "phase": "correct", "note": "ROUTER.md sizes move here from six test files: 2,002 bytes plus the instance name, 4 fewer with notes off, template 1,935", "fingerprint": "c98bbe00125b0ea4d22f74fefb28774cd3aaf89af4bc627ade5969ad2506aab7"},
     {"date": "2026-10-17", "phase": "correct", "note": "search falls back to any word when no hit has every word: tools/list 6,122 to 6,142 bytes, search 977 to 997", "fingerprint": "d76f93923ac742c7c58d238c102d21d49b83ab34d164d0b2ccd83b51fe5f932a"},
     {"date": "2026-10-25", "phase": "links", "note": "brief and search take under, records_query cites, get lists sources and cited_by; descriptions trimmed to pay: tools/list 6,142 to 6,132 bytes, brief 369 to 410, search 997 to 940, get 741 to 744, fact_get 2,021 to 2,004, records_query 1,123 to 1,143; get adds related.sources and source cited_by: q04 2,588 to 2,816, q21 3,278 to 3,352, q24 3,406 to 3,480", "fingerprint": "86e463ae9f75dd7fbfbc8a4ea8999977eabbe3f4306077e708fec5d06f7cd4b0"},
-    {"date": "2026-10-29", "phase": "any-word", "note": "1.11.0 ranks every search by any word, and search's description says so: tools/list 6,132 to 6,139 bytes, search 940 to 947. q04's search returns 10 hits instead of 1, 2,816 to 6,216 bytes", "fingerprint": "643abe0d1e70941525a5912f24fa0d9443ba236390f29f492e9f3a81fed52159"}
+    {"date": "2026-10-29", "phase": "any-word", "note": "1.11.0 ranks every search by any word, and search's description says so: tools/list 6,132 to 6,139 bytes, search 940 to 947. q04's search returns 10 hits instead of 1, 2,816 to 6,216 bytes", "fingerprint": "643abe0d1e70941525a5912f24fa0d9443ba236390f29f492e9f3a81fed52159"},
+    {"date": "2026-11-10", "phase": "one-store", "note": "search and get read past agent sessions: search takes since, until and the session entity, and a query is optional with dates; get takes the session entity. tools/list 6,139 to 6,243 bytes, search 947 to 1,041, get 744 to 754, and the tools/list cap in tests/conftest.py moves from 6,144 to 6,250. The handshake gains one sentence saying past sessions are in search and memory isn't kept in notes files (140 bytes). The router is unchanged: it has 6 bytes of room under 2,048 for the longest name. Startup is re-measured: Example Co 10,895 to 11,139 (budget 11,139, ceiling 12,000) and the demo brain 9,895 to 10,139 (budget 10,139, ceiling 11,000)", "fingerprint": "3e1d0b1d479a867ad5154d05ffcdd0e3c72d738b6ca0f86c0c704251c5e51bcc"},
+    {"date": "2026-11-10", "phase": "session-pages", "note": "get's description says how a session opens at a message (id#n): tools/list 6,243 to 6,281 bytes, get 754 to 792, and the tools/list cap in tests/conftest.py moves from 6,250 to 6,290. Startup follows: Example Co 11,139 to 11,177 and the demo brain 10,139 to 10,177, both under their ceilings. A session page is 3,000 characters where it was 8,000, and a session hit in search drops its offset", "fingerprint": "7036f2b704ff0ebc5ec26a01041a5310c361a7b07bf16adf80b293d3f871bd79"}
   ]
 }

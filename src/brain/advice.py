@@ -593,3 +593,84 @@ def rollback_version_error(path: str, found: str | None, current: str) -> str:
         f"--rollback-from {path} is {'the wheel for ' + found if found else 'not a wheel brain update can read'}, "
         f"but the version you are running is {current}; pass the {current} wheel from {RELEASES_URL}"
     )
+
+
+# The session record (brain.sessions): each refusal names the fix.
+def session_ref_error(ref: str) -> str:
+    return (
+        f"{ref!r} is not a session id; a session id is the tool's name, a colon and the tool's own id, such as "
+        "claude:0f3a..., as search and brain sessions status show it (tools: claude, codex, grok, hermes)"
+    )
+
+
+def session_missing_error(ref: str) -> str:
+    return (
+        f"the session record has no session {ref}; search lists sessions with their ids, and brain sessions sync "
+        "adds what the tools have written since the last sync"
+    )
+
+
+def session_message_missing_error(session: str, n: int, held: int) -> str:
+    return (
+        f"session {session} has {held} messages and no message {n}; open it with {session}#1 to {session}#{held}, "
+        f"or with {session} alone for its start"
+    )
+
+
+def sessions_off_error() -> str:
+    return (
+        "session recording is off for this brain; to turn it on, set record = true under [sessions] in brain.toml "
+        "(or remove the line), then run brain sessions sync"
+    )
+
+
+def sessions_local_error() -> str:
+    return (
+        "past sessions are read on the machine that holds them: run brain serve or brain read there. A hub "
+        "connection and a folder token don't see the session record"
+    )
+
+
+def search_needs_words_error() -> str:
+    return (
+        "search needs a query with at least one word, or since or until (a day written like 2026-11-09) to list "
+        "that period's sessions"
+    )
+
+
+def session_range_error(first: int, last: int, most: int, *, held: int | None = None, too_long: bool = False) -> str:
+    if held is not None:
+        return f"the session has {held} messages, so --from {first} --to {last} asks past its end; use 1 to {held}"
+    if too_long:
+        return f"messages {first} to {last} are longer than a source holds (2,000,000 characters); take fewer messages"
+    return (
+        f"--from {first} --to {last} is not a range an excerpt takes: from must not be after to, and an excerpt "
+        f"holds at most {most} messages; split a longer stretch into two excerpts"
+    )
+
+
+def session_excerpt_hint(session: str, first: int, last: int) -> str:
+    return f"brain sessions excerpt {session} --from {first} --to {last} --instance <this directory> prints the op to send"
+
+
+def session_excerpt_ref_error(ref: str) -> str:
+    return (
+        f"external_ref {ref!r} starts with session: but is not a session excerpt; an excerpt's external_ref is "
+        "session:<session id>#<first>-<last>, such as session:claude:0f3a...#12-14, and brain sessions excerpt "
+        "<session id> --from 12 --to 14 prints the whole op"
+    )
+
+
+def session_excerpt_shape_error(kind: str, hint: str) -> str:
+    return (
+        f"a session excerpt is a source of kind {kind} with no author_person_id and no supersedes_id: the record "
+        f"holds what was said, not who typed it. {hint}"
+    )
+
+
+def session_excerpt_content_error(session: str, first: int, last: int, hint: str) -> str:
+    return (
+        f"this content is not messages {first} to {last} of {session} as the session record holds them, so it is "
+        f"refused; an excerpt is copied, never edited or summarised. {hint}"
+    )
+

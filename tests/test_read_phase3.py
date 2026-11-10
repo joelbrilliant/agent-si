@@ -449,6 +449,20 @@ def test_tools_list_grows_only_by_the_meeting_entity() -> None:
     assert len(compact) <= TOOLS_LIST_CEILING
     assert len(compact) == tools_list_budgets()["tools_list"]
     listed = json.loads(compact)
+    # One store: put back search's query rule, drop since and until, and take session out of search and get. The
+    # two descriptions go back below, with the earlier ones.
+    search_tool = next(tool for tool in listed["tools"] if tool["name"] == "search")
+    props = search_tool["inputSchema"]["properties"]
+    assert props["query"] == {"type": "string", "maxLength": 200}
+    props["query"] = {"type": "string", "minLength": 1, "maxLength": 200}
+    for name in ("since", "until"):
+        assert props.pop(name) == {"type": "string"}
+    props["entities"]["items"]["enum"].remove("session")
+    assert props["entities"]["maxItems"] == 11
+    props["entities"]["maxItems"] = 10
+    assert "required" not in search_tool["inputSchema"]
+    search_tool["inputSchema"]["required"] = ["query"]
+    next(tool for tool in listed["tools"] if tool["name"] == "get")["inputSchema"]["properties"]["entity"]["enum"].remove("session")
     # Put back the earlier records_query description, from before the open sentence.
     query = next(tool for tool in listed["tools"] if tool["name"] == "records_query")
     # Links: put back get's and records_query's descriptions from before links, and drop under from brief

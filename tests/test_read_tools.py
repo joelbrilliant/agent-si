@@ -787,7 +787,7 @@ def test_search_rejects_a_query_with_no_words(tmp_path: Path) -> None:
     for query in ("***", '"" ()'):
         result = call(instance, "search", query=query)
         assert result.code == "bad_query"
-        assert json.loads(result.text)["error"]["message"] == "query has no searchable words"
+        assert json.loads(result.text)["error"]["message"] == advice.search_needs_words_error()
 
 
 def test_search_pages_and_filters_by_entity(tmp_path: Path) -> None:

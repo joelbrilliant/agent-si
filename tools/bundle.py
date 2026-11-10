@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build the one-file installer: agent-si and agent-memory in one self-extracting sh file.
+"""Build the one-file installer: agent-si in one self-extracting sh file.
 
-    python3 tools/bundle.py --memory PATH-TO-AGENT-MEMORY-CHECKOUT --out dist/
+    python3 tools/bundle.py --out dist/
 
-It builds a wheel of this checkout and of the agent-memory checkout (each from a clean copy, so a stale build folder
-can't leak into it), writes SHA256SUMS for both, and appends a gzipped tar of the three files to the install script
+It builds a wheel of this checkout (from a clean copy, so a stale build folder can't leak into it), writes its
+SHA256SUMS, and appends a gzipped tar of the two files to the install script
 (tools/bundle-install.sh) after a marker line. The script's first lines hold the header's length in bytes, so it
 finds the payload without scanning binary. The file is written twice with the same bytes: as
 install-agent-si-<version>.sh, and as install-agent-si.sh, so that releases/latest/download/install-agent-si.sh is a
@@ -99,19 +99,16 @@ def assemble(template: str, wheels: dict[str, bytes]) -> bytes:
     return header(template) + payload(files)
 
 
-def build(memory: Path, out: Path, engine: Path = ROOT) -> Path:
+def build(out: Path, engine: Path = ROOT) -> Path:
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="bundle-wheels-") as scratch:
         si = build_wheel(engine, Path(scratch) / "si")
-        mem = build_wheel(memory, Path(scratch) / "memory")
-        names = {}
-        for wheel, dist in ((si, "agent_si"), (mem, "agent_memory")):
-            found = _WHEEL.match(wheel.name)
-            if not found or found["dist"] != dist:
-                raise BundleError(f"expected a {dist} wheel, got {wheel.name}")
-            names[wheel.name] = wheel.read_bytes()
-        version = _WHEEL.match(si.name)["version"]
+        found = _WHEEL.match(si.name)
+        if not found or found["dist"] != "agent_si":
+            raise BundleError(f"expected an agent_si wheel, got {si.name}")
+        names = {si.name: si.read_bytes()}
+        version = found["version"]
     data = assemble(TEMPLATE.read_text(encoding="utf-8"), names)
     target = out / f"install-agent-si-{version}.sh"
     stable = out / STABLE
@@ -123,12 +120,11 @@ def build(memory: Path, out: Path, engine: Path = ROOT) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build the one-file agent-si and agent-memory installer.")
-    parser.add_argument("--memory", required=True, help="the agent-memory checkout (a folder with a pyproject.toml)")
+    parser = argparse.ArgumentParser(description="Build the one-file agent-si installer.")
     parser.add_argument("--out", required=True, help="the folder to write install-agent-si.sh (and a versioned copy) into")
     ns = parser.parse_args(argv)
     try:
-        target = build(Path(ns.memory), Path(ns.out))
+        target = build(Path(ns.out))
     except BundleError as exc:
         print(f"bundle.py: {exc}", file=sys.stderr)
         return 1

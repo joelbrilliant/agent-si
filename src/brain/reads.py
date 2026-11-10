@@ -14,6 +14,8 @@ from brain import advice, registry, schemas, scope, store, strict, truth, units,
 from brain.config import ConfigError, load_config
 from brain.ingress import has_lone_surrogate
 from brain.migrate import latest_version
+from brain import sessions as sessions_mod
+from brain.sessions import record as session_record
 from brain.text import ELLIPSIS, single_line
 from brain.validate import json_pointer, json_type
 
@@ -72,23 +74,28 @@ TOOLS: list[dict] = [
     {
         "name": "search",
         "title": "Search",
-        "description": "Full-text search over every entity. Returns ids and snippets; get has the full row. Any word counts; more and rarer words rank first. Closed items need include_closed. Without entities, at most 3 sources rank among the first hits. under (a project id) keeps one folder.",
+        "description": "Full-text search of the brain and past agent sessions. Returns ids and snippets; get has the rest. Any word counts; more and rarer words rank first. since and until are days; alone they list sessions. Closed items need include_closed. Without entities, at most 3 sources rank among the first hits. under (a project id) keeps one folder.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "minLength": 1,
                     "maxLength": 200
                 },
                 "entities": {
                     "type": "array",
                     "items": {
-                        "enum": ["record", "decision", "action", "checklist_item", "project", "person", "system", "fact", "thread", "source"]
+                        "enum": ["record", "decision", "action", "checklist_item", "project", "person", "system", "fact", "thread", "source", "session"]
                     },
                     "minItems": 1,
-                    "maxItems": 10,
+                    "maxItems": 11,
                     "uniqueItems": True
+                },
+                "since": {
+                    "type": "string"
+                },
+                "until": {
+                    "type": "string"
                 },
                 "include_closed": {
                     "type": "boolean",
@@ -111,8 +118,7 @@ TOOLS: list[dict] = [
                     "maxLength": 40
                 }
             },
-            "additionalProperties": False,
-            "required": ["query"]
+            "additionalProperties": False
         },
         "annotations": {
             "readOnlyHint": True,
@@ -122,12 +128,12 @@ TOOLS: list[dict] = [
     {
         "name": "get",
         "title": "Get",
-        "description": "One row by entity and id, with its sources and related rows; a source lists the rows citing it. A record body or source content comes in pages: pass field and offset.",
+        "description": "One row by entity and id, with its sources and related rows; a source lists the rows citing it. A record body or source content comes in pages: pass field and offset. A session opens at message n of id#n.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "entity": {
-                    "enum": ["action", "checklist_item", "decision", "record", "project", "person", "system", "fact", "claim", "thread", "thread_link", "meeting", "signal", "source"]
+                    "enum": ["action", "checklist_item", "decision", "record", "project", "person", "system", "fact", "claim", "thread", "thread_link", "meeting", "signal", "source", "session"]
                 },
                 "id": {
                     "type": "string",
@@ -2023,23 +2029,143 @@ def _named_project_hits(con: sqlite3.Connection, raw: str, arguments: dict, zone
     return hits
 
 
-def _search(con: sqlite3.Connection, arguments: dict, zone: str, scoped: bool = False) -> ToolResult:
-    raw = arguments["query"]
+# Past sessions beside the brain's hits are leads: a few, each with its best line, because every search pays for
+# them (about 1 KB here against about 2 KB for two lines each, measured on a real brain on 10 November 2026). When
+# the brain has no hit, or the search is of sessions only, the sessions are the answer and come deeper.
+_SESSIONS_BESIDE = 3
+_SESSION_EXCERPTS_BESIDE = 1
+_SESSION_LEAD_CHARS = 160
+_SESSIONS_ALONE = 5
+_SESSION_TITLE_CHARS = 80
+# The most ranked rows a search with dates reads to fill one page.
+_DATED_SCAN = 400
+_DATED_PAGE = 50
+SESSION_ENTITY = "session"
+
+
+@dataclass(frozen=True)
+class SessionSide:
+    """The session record as a read may use it: only on the machine that holds it, never for a folder token."""
+
+    db: Path
+    zone: str
+    asking: tuple[str, str] | None = None  # the session the caller runs in, left out of its own search
+    warning: str = ""
+
+
+def _session_item(hit, zone: str) -> dict:
+    excerpts = []
+    for excerpt in hit.excerpts:
+        item = {"n": excerpt.n, "role": excerpt.role, "text": excerpt.text}
+        at = session_record.clock(excerpt.timestamp, zone)
+        if at != session_record.NO_TIME:
+            item["at"] = at
+        excerpts.append(item)
+    # The id carries the first excerpt's message number, so get on it opens the session at that line and not at
+    # its start. Another excerpt opens the same way, with its own n after the hash.
+    place = session_record.place_ref(hit.harness, hit.session_id, hit.excerpts[0].n) if hit.excerpts else hit.id
+    return {
+        "id": place,
+        "title": single_line(hit.title, max_chars=_SESSION_TITLE_CHARS, ellipsis=ELLIPSIS),
+        "date": session_record.local_day(hit.updated_at, zone) or None,
+        "excerpts": excerpts,
+    }
+
+
+def _session_hits(side: SessionSide, raw: str, arguments: dict, alone: bool) -> tuple[list[dict], str]:
+    """The sessions for a search and, when the dates alone chose them, a line saying so. alone: the brain gave no
+    hit, so the sessions come deeper."""
+    since, until = arguments.get("since"), arguments.get("until")
+    first, after = session_record.day_bounds(since, until, side.zone)
+    only = arguments.get("entities") == [SESSION_ENTITY]
+    deep = only or alone
+    limit = arguments["limit"] if only else _SESSIONS_ALONE if alone else _SESSIONS_BESIDE
+    excerpts = session_record.MAX_EXCERPTS if deep else _SESSION_EXCERPTS_BESIDE
+    chars = session_record.EXCERPT_CHARS if deep else _SESSION_LEAD_CHARS
+    worded = bool(session_record.fts_terms(raw))
+    found = []
+    if worded:
+        found = session_record.search(side.db, raw, limit=limit, excerpts=excerpts, excerpt_chars=chars,
+                                      exclude=side.asking, since=first, before=after)
+    note = ""
+    if not found and (since or until):
+        found = session_record.period(side.db, first, after, limit=limit, exclude=side.asking, excerpt_chars=chars)
+        if found and worded:
+            note = "No session in those dates had the words; these are that period's sessions, newest first."
+    return [_session_item(hit, side.zone) for hit in found], note
+
+
+def _in_dates(day: str | None, since: str | None, until: str | None) -> bool:
+    return bool(day) and (not since or day >= since) and (not until or day <= until)
+
+
+def _dated_rows(con, match: str, arguments: dict, limit: int, offset: int, zone: str) -> list:
+    """One page of ranked rows whose date is inside since and until, plus one more row. The dates are each row's
+    own (a source's date, or the local day another row last changed), so the ranking is read in pages and filtered."""
+    since, until = arguments.get("since"), arguments.get("until")
+    kept: list = []
+    scanned = 0
+    while len(kept) < offset + limit + 1 and scanned < _DATED_SCAN:
+        rows = _search_rows(con, match, arguments, _DATED_PAGE, scanned)
+        kept += [row for row in rows[:_DATED_PAGE]
+                 if _in_dates(_hit_date(con, row["entity"], row["ref_id"], zone), since, until)]
+        if len(rows) <= _DATED_PAGE:
+            break
+        scanned += _DATED_PAGE
+    return kept[offset : offset + limit + 1]
+
+
+def _search(
+    con: sqlite3.Connection, arguments: dict, zone: str, scoped: bool = False, side: SessionSide | None = None
+) -> ToolResult:
+    raw = arguments.get("query") or ""
+    since, until = arguments.get("since"), arguments.get("until")
+    for name, day in (("since", since), ("until", until)):
+        # The schema leaves the date format out to save its bytes in every session's tools list.
+        if day is not None and not _real_date(day):
+            raise ToolError("invalid_arguments", advice.date_error(), path=f"/{name}")
+    dated = bool(since or until)
+    asked = arguments.get("entities")
+    sessions_only = asked == [SESSION_ENTITY]
     # Every query ranks by any word (1.11.0), so a record missing one word still ranks, and bm25 puts hits with more
     # and rarer words first. Needing every word dropped the right record while long notes holding every word led.
     match = fts_query(raw, any_word=True)
-    if match is None:
-        raise ToolError("bad_query", "query has no searchable words")
+    if match is None and not dated:
+        raise ToolError("bad_query", advice.search_needs_words_error(), path="/query")
     limit = arguments["limit"]
     offset = arguments["offset"]
+    if asked:
+        arguments = {**arguments, "entities": [entity for entity in asked if entity != SESSION_ENTITY] or None}
+    sessions, session_note = None, ""
+    wants_sessions = side is not None and arguments.get("under") is None and (asked is None or SESSION_ENTITY in asked)
+
+    def result_for(hits: list, next_offset, truncated: bool, unverified: int, relaxed: bool) -> dict:
+        result = _search_result(raw, match or "", hits, next_offset, truncated, unverified, relaxed)
+        if sessions:
+            result["sessions"] = sessions
+        for line in (session_note, side.warning if side is not None else ""):
+            if line:
+                result["warnings"].append(line)
+        return result
+
+    if match is None or sessions_only:
+        # No words to rank the brain by, or a search of sessions only.
+        if wants_sessions:
+            sessions, session_note = _session_hits(side, raw, {**arguments, "entities": asked}, alone=True)
+        return _ok(result_for([], None, False, 0, False))
     if arguments.get("under") is not None:
         arguments = {**arguments, "_branch": _branch_ids(con, arguments["under"])}
     elif scoped:
         # A folder token always searches its branch, so a hit outside it never matches, ranks or counts as unverified.
         arguments = {**arguments, "_branch": _visible_folders(con)}
     pins = _named_project_hits(con, raw, arguments, zone)
+    if dated:
+        pins = [hit for hit in pins if _in_dates(hit["date"], since, until)]
     pinned = {(hit["entity"], hit["id"]) for hit in pins}
-    rows = _search_rows(con, match, arguments, limit, offset)
+    if dated:
+        rows = _dated_rows(con, match, arguments, limit, offset, zone)
+    else:
+        rows = _search_rows(con, match, arguments, limit, offset)
     # relaxed still means no result has every word, on every page, so the usage log's share stays comparable.
     every_word = fts_query(raw)
     relaxed = bool(rows) and every_word != match and not _search_has_match(con, every_word, arguments)
@@ -2080,25 +2206,62 @@ def _search(con: sqlite3.Connection, arguments: dict, zone: str, scoped: bool = 
         ):
             hit["unchecked"] = True
         checked.append((index, hit))
+    if wants_sessions:
+        sessions, session_note = _session_hits(side, raw, {**arguments, "entities": asked},
+                                               alone=not pins and not checked)
     kept: list[tuple[int, dict]] = []
     truncated = False
     next_offset = offset + limit if more else None
     for index, hit in checked:
-        trial = _search_result(raw, match, pins + [item for _, item in kept] + [hit], None, False, unverified, relaxed)
+        trial = result_for(pins + [item for _, item in kept] + [hit], None, False, unverified, relaxed)
         if not _fits(trial):
             truncated = True
             next_offset = offset + index
             break
         kept.append((index, hit))
     hits = pins + [hit for _, hit in kept]
-    result = _search_result(raw, match, hits, next_offset, truncated, unverified, relaxed)
+    result = result_for(hits, next_offset, truncated, unverified, relaxed)
     while not _fits(result) and kept:
         index, _ = kept.pop()
         hits = pins + [hit for _, hit in kept]
         truncated = True
         next_offset = offset + index
-        result = _search_result(raw, match, hits, next_offset, truncated, unverified, relaxed)
+        result = result_for(hits, next_offset, truncated, unverified, relaxed)
     return _ok(result)
+
+
+def _get_session(side: SessionSide, arguments: dict) -> ToolResult:
+    """A page of one past session's text. An id that ends in a message number (#n, as search gives it) opens at
+    that message. offset, when given, is where the page starts, as it is for a source's content."""
+    place = session_record.parse_place(arguments["id"])
+    if place is None:
+        raise ToolError("bad_id", advice.session_ref_error(arguments["id"]), path="/id")
+    harness, session_id, at = place
+    try:
+        page = session_record.read(side.db, harness, session_id, side.zone, offset=arguments["offset"], at=at)
+    except session_record.NoSuchMessage as missing:
+        raise ToolError(
+            "not_found",
+            advice.session_message_missing_error(
+                session_record.session_ref(harness, session_id), missing.n, missing.messages
+            ),
+            path="/id",
+        ) from None
+    if page is None:
+        raise ToolError("not_found", advice.session_missing_error(arguments["id"]), path="/id")
+    row = {
+        "id": session_record.session_ref(page["harness"], page["session_id"]),
+        "tool": page["harness"],
+        "title": single_line(page["title"], max_chars=_SESSION_TITLE_CHARS, ellipsis=ELLIPSIS),
+        "cwd": page["cwd"],
+        "started_at": session_record.clock(page["started_at"], side.zone),
+        "updated_at": session_record.clock(page["updated_at"], side.zone),
+        "messages": page["messages"],
+        "content": page["text"],
+    }
+    pages = {"content": {"offset": page["offset"], "returned": page["returned"], "total": page["chars"],
+                         "next_offset": page["next_offset"]}}
+    return _ok({"entity": SESSION_ENTITY, "id": row["id"], "row": row, "pages": pages, "truncated": False})
 
 
 _PAGE_CHARS = 8000
@@ -3779,9 +3942,12 @@ def run_tool(
     now: str | None = None,
     opener=None,
     folders: tuple[str, ...] | None = None,
+    local: bool = False,
+    asking: tuple[str, str] | None = None,
 ) -> ToolResult:
     """Run a read tool. With folders (a hub token's folder ids), every read sees only those folders and what is filed
-    in them (brain.scope); without, nothing changes."""
+    in them (brain.scope); without, nothing changes. local says the caller is on the machine that holds the brain
+    (brain serve, brain read): only then does a read see the session record. asking is the caller's own session."""
     if name not in _TOOLS:
         raise UnknownTool(name)
     if arguments is None:
@@ -3801,7 +3967,8 @@ def run_tool(
             return ToolResult(_compact(refusal.payload()), None, True, refusal.code)
         opener = scope.reader(folders)
     try:
-        return _execute(Path(instance_dir), name, arguments, now, opener or store.connect_reader, folders)
+        return _execute(Path(instance_dir), name, arguments, now, opener or store.connect_reader, folders,
+                        local, asking)
     except ToolError as exc:
         return ToolResult(_compact(exc.payload()), None, True, exc.code)
     except sqlite3.OperationalError as exc:
@@ -3822,7 +3989,7 @@ def _search_cookie(db: Path, con: sqlite3.Connection) -> tuple:
 
 
 # What a folder token can't ask about: facts, systems and claims aren't filed in a folder.
-_UNFILED = {"fact": "facts", "system": "systems", "claim": "claims"}
+_UNFILED = {"fact": "facts", "system": "systems", "claim": "claims", SESSION_ENTITY: "past sessions"}
 
 
 def _folder_refusal(name: str, arguments: dict, folders: tuple[str, ...]) -> ToolError | None:
@@ -3836,7 +4003,37 @@ def _folder_refusal(name: str, arguments: dict, folders: tuple[str, ...]) -> Too
     return None
 
 
-def _execute(instance_dir: Path, name: str, arguments: dict, now: str, opener, folders=None) -> ToolResult:
+def _session_side(instance_dir: Path, name: str, arguments: dict, config, folders, local: bool, asking):
+    """The session record for this read, or None when the read doesn't touch it. A read that asks for sessions and
+    can't have them is refused with the reason."""
+    wanted = arguments.get("entities") or ()
+    if name == "get":
+        needs = arguments.get("entity") == SESSION_ENTITY
+    else:
+        needs = name == "search" and wanted == [SESSION_ENTITY]
+    available = local and folders is None and config.sessions.record
+    if not available:
+        if needs:
+            off = local and folders is None
+            raise ToolError("unavailable", advice.sessions_off_error() if off else advice.sessions_local_error())
+        return None
+    if name != "get" and not (name == "search" and arguments.get("under") is None
+                              and (not wanted or SESSION_ENTITY in wanted)):
+        return None
+    side = SessionSide(session_record.path_for(instance_dir), config.timezone, asking)
+    if name == "search":
+        try:
+            sessions_mod.refresh(instance_dir, config)
+        except (OSError, sqlite3.Error) as exc:
+            # The record as it was still answers; the brain's hits never wait on it.
+            side = replace(side, warning=f"The session record couldn't be refreshed ({type(exc).__name__}); "
+                                         "its sessions may be behind.")
+    return side
+
+
+def _execute(
+    instance_dir: Path, name: str, arguments: dict, now: str, opener, folders=None, local: bool = False, asking=None
+) -> ToolResult:
     try:
         config = load_config(instance_dir / "brain.toml")
     except ConfigError as exc:
@@ -3844,6 +4041,9 @@ def _execute(instance_dir: Path, name: str, arguments: dict, now: str, opener, f
     db = instance_dir / "brain.sqlite3"
     if not db.is_file():
         return _fail("unavailable", "no store at brain.sqlite3")
+    side = _session_side(instance_dir, name, arguments, config, folders, local, asking)
+    if name == "get" and arguments.get("entity") == SESSION_ENTITY:
+        return _get_session(side, arguments)
     con = opener(db)
     try:
         # A folder token's connection arrives inside the transaction that built its views, so ids and rows share a snapshot.
@@ -3872,7 +4072,7 @@ def _execute(instance_dir: Path, name: str, arguments: dict, now: str, opener, f
             if name == "records_query":
                 return _records_query(con, arguments, now)
             if name == "search":
-                return _search(con, arguments, config.timezone, folders is not None)
+                return _search(con, arguments, config.timezone, folders is not None, side)
             if name == "get":
                 return _get(con, arguments, now, config.timezone)
             if name == "signals":

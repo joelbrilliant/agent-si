@@ -130,7 +130,8 @@ def loads(raw: bytes | str, *, what: str = "input", max_nesting: int = MAX_NESTI
             text = bytes(raw).decode("utf-8")
         except UnicodeDecodeError:
             raise IngressError(ENCODING, what) from None
-    if nesting_depth(text, max_nesting) > max_nesting:
+    # Text with no more opening brackets than the limit can't nest deeper than it, so only the rest is scanned.
+    if text.count("[") + text.count("{") > max_nesting and nesting_depth(text, max_nesting) > max_nesting:
         raise IngressError(NESTING, what, max_nesting)
     try:
         doc = json.loads(text, parse_constant=_no_constant, parse_float=_finite_float, parse_int=_ranged_int)

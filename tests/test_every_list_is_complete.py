@@ -453,9 +453,11 @@ def test_the_read_tools_list_the_entities_the_engine_has() -> None:
     tools = {tool["name"]: tool["inputSchema"]["properties"] for tool in reads.TOOLS}
     entities = set(reads._ENTITIES)
     expected = {
-        "get.entity": ({*entities, "claim"}, set(tools["get"]["entity"]["enum"])),
+        # A past session is read from the session record beside the brain, so it is in no brain table: search and
+        # get take it, records_query doesn't.
+        "get.entity": ({*entities, "claim", reads.SESSION_ENTITY}, set(tools["get"]["entity"]["enum"])),
         "records_query.entity": (entities, set(tools["records_query"]["entity"]["enum"])),
-        "search.entities": ({entity for entity, _key, _events in store.SEARCH_TABLES.values()},
+        "search.entities": ({entity for entity, _key, _events in store.SEARCH_TABLES.values()} | {reads.SESSION_ENTITY},
                             set(tools["search"]["entities"]["items"]["enum"])),
     }
     _fail([f"{where} (src/brain/reads.py TOOLS) lists {sorted(listed)}, but the engine has {sorted(engine)}"

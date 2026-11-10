@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 
 from brain import connect as connect_mod, registry
+from brain import sessions as sessions_mod
+from brain.config import load_config
 from brain.init import init_instance
 
 _NAME = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
@@ -60,6 +62,8 @@ def run(reader, writer, *, register: bool = True) -> dict:
                      + (f" ({item['message']})" if item["message"] else "") + "\n")
         if item["text"]:
             writer.write(item["text"] + "\n")
+    recorded = sessions_mod.summary(result["instance"], load_config(Path(result["instance"]) / "brain.toml"))
+    writer.write(sessions_mod.summary_line(recorded) + "\n")
     writer.write("\nAsk your agent: read my brain brief.\n")
     writer.flush()
     return {**result, "connected": connected}

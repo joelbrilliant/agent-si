@@ -312,6 +312,12 @@ def _machine_folders(tmp_path_factory) -> None:
     # Nor this machine's agent memory, whose token counts brain usage report reads when it's installed.
     os.environ["XDG_DATA_HOME"] = str(root / "data")
     os.environ.pop("AGENT_SESSION_DB", None)
+    # Nor this machine's agent sessions, which a search on this machine would otherwise file into the test's brain.
+    for name in ("CLAUDE_PROJECTS_ROOT", "CODEX_SESSIONS_ROOT", "GROK_SESSIONS_ROOT"):
+        os.environ[name] = str(root / "no-sessions" / name.lower())
+    os.environ["HERMES_HOME"] = str(root / "no-sessions" / "hermes")
+    os.environ.pop("HERMES_SESSION_DB", None)
+    os.environ.pop("CLAUDE_CODE_SESSION_ID", None)
 
 
 def config_with(**changes) -> str:
@@ -376,7 +382,10 @@ def upsert_op(op: str, row: dict, source_id: str, *, locator: str = "synthetic",
     }
 
 
-TOOLS_LIST_CEILING = 6_144  # the 6 KiB cap on the whole tools/list reply; a limit, not a measurement
+# The cap on the whole tools/list reply; a limit, not a measurement. 6 KiB (6,144) until the one store, when search
+# and get took past sessions (since, until and the session entity) and the cap moved up by 106 bytes. It moved 40
+# more when get's description said how a session opens at a message (id#n).
+TOOLS_LIST_CEILING = 6_290
 
 
 def tools_list_budgets() -> dict:

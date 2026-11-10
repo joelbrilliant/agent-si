@@ -39,7 +39,7 @@ Extraction reads candidate files only and calls no model. A candidate that passe
 `brain backup --instance demo --out backups [--label before-import]` writes one gzip bundle, `<name>-<utc>-seq<n>[-<label>].tar.gz`, and prints its receipt. `brain restore backups/<bundle> --dir restored` unpacks it into a new directory.
 
 - **Holds:** the store, `brain.toml`, `ROUTER.md` and any `fetch/*.state.json` cursors, with a manifest of hashes and the write-log digest. It reads the cursors first and snapshots the store second, so a restored cursor is never ahead of the restored store.
-- **Leaves out:** `fetch/inbox/` (document text is prunable), `fetch/mark.key` (a secret), lock files, `PAUSED` and other bundles.
+- **Leaves out:** `fetch/inbox/` (document text is prunable), `fetch/mark.key` (a secret), `sessions.sqlite3` (the session record, a plain SQLite file to copy yourself), lock files, `PAUSED` and other bundles.
 - **Safe to take:** a running instance is copied with SQLite's backup API, checked with `brain check` before anything is kept, written mode 0600, and read back before it counts. Two bundles of one store taken in the same second are byte for byte equal.
 - **Pruning:** a `pre-update` label keeps only the newest two bundles of that label, and only after the new one has been read back. No other label is pruned.
 - **Restore never overwrites:** the target must be missing or empty. It refuses a bundle member that isn't one of the five allowed names, a link or device, a database that isn't a rollback-journal SQLite file, a schema newer than the engine's, and any schema that differs from the engine's, such as a planted trigger or a `sqlite_stat1` table. It refuses rather than repairs. An older schema migrates after those checks.
@@ -66,7 +66,7 @@ sh install.sh --from <wheel>      # never by name: agent-si isn't on a package i
 
 ## Updates
 
-New releases are on the [releases page](https://github.com/joelbrilliant/agent-si/releases). Nothing in the engine looks for them, fetches a package by name or schedules a job, because agent-si and agent-memory aren't published on a package index. To update, run the installer file from the page again (it upgrades both tools and keeps your brain), or give `brain update` a wheel you downloaded:
+New releases are on the [releases page](https://github.com/joelbrilliant/agent-si/releases). Nothing in the engine looks for them, fetches a package by name or schedules a job, because agent-si isn't published on a package index. To update, run the installer file from the page again (it upgrades agent-si and keeps your brain and its session record), or give `brain update` a wheel you downloaded:
 
 ```sh
 brain update --from-wheel PATH-TO-THE-WHEEL
@@ -139,6 +139,25 @@ The `capture` collector turns exported text into sources: a changed document bec
 - **The original file:** the command warns when the original is still in a collector's folder, and never deletes it. `brain-fetch run --rescan` would copy it back.
 - **After a stop:** run the same command again. Until it finishes, `brain check` fails and `brain backup` refuses, because the file still holds free pages.
 - **Check:** `brain check` reports a redaction that did not finish, any leftover copy of a redacted source, and any change to the engine's triggers.
+
+## Past sessions (1.15.0, small pages from 1.16.0)
+
+`sessions.sqlite3` in the instance folder is the session record: what was said in past Claude Code, Codex, Grok and Hermes sessions, filed by code. It is not the brain. It has no change packets, no write log and no gate, and it never opens `brain.sqlite3`.
+
+- **What is filed:** the user's and the assistant's text of each session, in order. Tool calls, tool output, subagent transcripts, cron runs and the context a tool writes for itself are left out. A message that matches a secret pattern is never stored, and a message is cut at 32,000 characters.
+- **Typed while the assistant is working (from 1.16.1):** Claude Code hands such a message to the model part way through the turn and writes it as an attachment row, not a user row. It is filed in its place as the user's, when Claude Code marks the row as a person's. A finished task, another session's message and a row that names no origin are left out.
+- **When:** `brain setup` and `brain connect` build it, every local `search` syncs it first (a sync with nothing new only lists the folders), and `brain sessions sync` does it by hand. One process syncs at a time; another one's search uses the record as it is.
+- **A record, not a mirror:** a message is added once under the tool's own key and never rewritten. A session the tool has deleted stays. `brain sessions forget <session id>` removes one and lists it so no later sync brings it back.
+- **Where from:** `~/.claude/projects`, `~/.codex/sessions`, `~/.grok/sessions` and `~/.hermes/state.db`, or `CLAUDE_PROJECTS_ROOT`, `CODEX_SESSIONS_ROOT`, `GROK_SESSIONS_ROOT`, `HERMES_HOME` and `HERMES_SESSION_DB`. Extra Hermes profiles go in `brain.toml`: `[sessions]` `hermes_profiles = { side = "~/.hermes/profiles/side/state.db" }`.
+- **Reading:** `search` adds `sessions` beside `hits`: up to 3 sessions with one excerpt each, as leads. When the brain has no hit they come deeper, up to 5 sessions with 3 excerpts, and with `entities: ["session"]` up to `limit` sessions with 3. Each excerpt has its message number `n`, who spoke and when. A session's `id` ends in the first excerpt's number (`claude:0f3a...#12`), so `get` with `entity: "session"` and that id opens the session at that message, and the same id with another excerpt's `n` opens it there. A page is 3,000 characters (from 1.16.0, where it was 8,000), each message under a header line such as `[12] user 2026-11-09 14:02`. It starts at the message, or at the earliest message before it that begins within 600 characters, so a short question comes with its answer and a long message before doesn't use the page up. The id without a number opens the session at its start, and `offset` (a page's `next_offset`) pages on. `brain sessions excerpt` and `forget` take the id with or without the number. Times are in the brain's time zone.
+- **The asking session is left out** of its own search where the tool names it: Claude Code gives the servers it starts `CLAUDE_CODE_SESSION_ID`.
+- **Only this machine reads it:** `brain serve` and `brain read`. A hub connection and a folder token never get sessions, and asking for them is refused with the reason.
+- **Quoting:** `brain sessions excerpt <session id> --from N --to M` prints an `add_source` op of kind `document` with `external_ref` `session:<session id>#N-M`, at most 50 messages. The applier re-reads those messages and refuses the source unless its content is exactly theirs, and refuses an author on it. The source then stays in the brain whatever happens to the session.
+- **The switch:** `[sessions] record = false`. Then nothing syncs, `search` returns the brain alone, and a read that asks for sessions is refused with how to turn it on.
+- **After an update from before 1.15.0:** nothing builds the record until the first local `search`, which then takes as long as a first build (about half a minute for a few thousand sessions). Run `brain sessions sync` first to do it up front.
+- **After an update from before 1.16.1:** the first sync reads every Claude Code session again, changed or not, and adds the messages typed mid-turn that the record lacks. They go after the messages a session already holds, each with its own time, because a filed message's number never changes. It is one full read of the transcripts (15 seconds for 2.4 GB where it was measured), so run `brain sessions sync` to do it up front. An older engine sharing the record leaves it as it is.
+- **What a tool writes for itself is left out:** Claude Code's task notifications, side-session and CI events and reminder blocks, Codex's process warnings and approval-review transcripts, Hermes' compaction notes. Other tool-written turns are still recorded.
+- **Not yet:** the record isn't in `brain backup` bundles or the hub, and it doesn't hold tool events.
 
 ## Reading the brain
 

@@ -8,7 +8,7 @@ set -eu
 
 UV_VERSION="0.11.6"  # pinned, at least two weeks old when chosen, bumped on purpose
 UV_MIN="0.9.0"       # a uv on PATH older than this is passed over for the pinned copy
-VERSION="1.14.0"
+VERSION="1.16.1"
 PYTHON="3.13"
 FROM=""
 BY_NAME="agent-si isn't on a package index, so this installer won't fetch it by name. Download install-agent-si.sh from https://github.com/joelbrilliant/agent-si/releases and run it, or pass --from with an agent-si wheel from that page"

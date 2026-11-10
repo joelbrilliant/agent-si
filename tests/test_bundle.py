@@ -1,10 +1,9 @@
 """The one-file installer: tools/bundle.py builds it, tools/bundle-install.sh is its head.
 
-The bundle is built from this checkout and a tiny stand-in agent-memory package made here (its `agent-memory` command
-records the calls it gets). It then runs in a temporary machine: HOME, XDG_*, uv's folders and TMPDIR all in a temp
-folder, UV_OFFLINE=1, only fake agent tools on PATH, and no controlling terminal. uv and its managed Python 3.13 are
-used from where they are installed, so the test is skipped without them. The real agent-memory wheel is proven by the
-clean-machine runs, and nothing here touches a real home, a real tool config or launchd.
+The bundle is built from this checkout and holds one wheel, agent-si. It then runs in a temporary machine: HOME,
+XDG_*, uv's folders and TMPDIR all in a temp folder, UV_OFFLINE=1, only fake agent tools on PATH, and no controlling
+terminal. uv and its managed Python 3.13 are used from where they are installed, so the test is skipped without
+them. Nothing here touches a real home, a real tool config, a real session folder or launchd.
 """
 from __future__ import annotations
 
@@ -33,59 +32,6 @@ spec = importlib.util.spec_from_file_location("bundle_tool", ROOT / "tools" / "b
 bundle = importlib.util.module_from_spec(spec)
 sys.modules["bundle_tool"] = bundle
 spec.loader.exec_module(bundle)
-
-MINI_BACKEND = '''\
-"""A PEP 517 backend in 30 lines, so building the stand-in needs no download."""
-import base64, hashlib, zipfile
-from pathlib import Path
-
-NAME, VERSION = "agent_memory", "0.0.1"
-
-
-def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-    here = Path(__file__).parent
-    dist = f"{NAME}-{VERSION}.dist-info"
-    files = {
-        "standin_memory.py": (here / "standin_memory.py").read_bytes(),
-        f"{dist}/METADATA": b"Metadata-Version: 2.1\\nName: agent-memory\\nVersion: 0.0.1\\nRequires-Python: >=3.11\\n",
-        f"{dist}/WHEEL": b"Wheel-Version: 1.0\\nGenerator: mini\\nRoot-Is-Purelib: true\\nTag: py3-none-any\\n",
-        f"{dist}/entry_points.txt": b"[console_scripts]\\nagent-memory = standin_memory:main\\n",
-    }
-    record = "".join(
-        f"{name},sha256={base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b'=').decode()},{len(data)}\\n"
-        for name, data in files.items()
-    ) + f"{dist}/RECORD,,\\n"
-    wheel = f"{NAME}-{VERSION}-py3-none-any.whl"
-    with zipfile.ZipFile(Path(wheel_directory) / wheel, "w") as archive:
-        for name, data in files.items():
-            archive.writestr(name, data)
-        archive.writestr(f"{dist}/RECORD", record)
-    return wheel
-'''
-
-STANDIN = '''\
-import json, os, sys
-from pathlib import Path
-
-
-def main():
-    args = sys.argv[1:]
-    with open(Path(os.environ["HOME"]) / "memory-calls.jsonl", "a") as log:
-        log.write(json.dumps(args) + "\\n")
-    if args == ["--version"]:
-        print("agent-memory 0.0.1 (stand-in)")
-        return 0
-    if args == ["connect", "all"]:
-        broken = bool(os.environ.get("STANDIN_FAIL"))
-        print(json.dumps({"results": [{"harness": "claude", "smoke": "fail" if broken else "pass",
-                                       "status": "failed" if broken else "written"}]}, sort_keys=True))
-        return 1 if broken else 0
-    if args == ["session", "sync"]:
-        print("session index sync complete")
-        return 0
-    return 2
-'''
-
 
 # -- the machine ---------------------------------------------------------------------------------------------------
 
@@ -153,16 +99,8 @@ class Machine:
 def built(tmp_path_factory):
     _uv()
     root = tmp_path_factory.mktemp("bundle")
-    standin = root / "standin"
-    standin.mkdir()
-    (standin / "pyproject.toml").write_text(
-        '[build-system]\nrequires = []\nbuild-backend = "mini_backend"\nbackend-path = ["."]\n\n'
-        '[project]\nname = "agent-memory"\nversion = "0.0.1"\n'
-    )
-    (standin / "mini_backend.py").write_text(MINI_BACKEND)
-    (standin / "standin_memory.py").write_text(STANDIN)
     out = root / "dist"
-    done = subprocess.run([sys.executable, str(ROOT / "tools" / "bundle.py"), "--memory", str(standin), "--out", str(out)],
+    done = subprocess.run([sys.executable, str(ROOT / "tools" / "bundle.py"), "--out", str(out)],
                           capture_output=True, text=True, timeout=600)
     if done.returncode != 0:
         if re.search(r"error sending request|dns error|Failed to fetch|offline|Could not resolve", done.stderr, re.I):
@@ -188,7 +126,7 @@ def test_bundle_py_prints_the_files_own_sha256_and_builds_the_same_bytes_from_th
     assert lines["sha256"] == hashlib.sha256(file.read_bytes()).hexdigest()
     assert file.stat().st_mode & stat.S_IXUSR
     files = _unpack(file)
-    assert sorted(files) == ["SHA256SUMS", f"agent_memory-0.0.1-py3-none-any.whl", f"agent_si-{__version__}-py3-none-any.whl"]
+    assert sorted(files) == ["SHA256SUMS", f"agent_si-{__version__}-py3-none-any.whl"]
     for line in files["SHA256SUMS"].decode().splitlines():
         digest, name = line.split("  ")
         assert hashlib.sha256(files[name]).hexdigest() == digest
@@ -218,29 +156,48 @@ def test_piping_the_bundle_into_sh_says_the_real_command(built, tmp_path) -> Non
             ) in done.stderr.decode()
 
 
-def test_the_bundle_installs_both_tools_makes_a_brain_connects_and_indexes(built, tmp_path) -> None:
+def _session(machine: Machine) -> None:
+    """One invented Claude Code session, where Claude Code keeps them in this machine's home."""
+    folder = machine.home / ".claude" / "projects" / "-work-garden"
+    folder.mkdir(parents=True)
+    rows = [
+        {"type": "user", "uuid": "u1", "sessionId": "claude-garden", "cwd": "/work/garden",
+         "timestamp": "2027-01-15T08:00:00.000Z",
+         "message": {"role": "user", "content": "bundlecanary where do the seed trays go"}},
+        {"type": "assistant", "uuid": "a1", "sessionId": "claude-garden", "cwd": "/work/garden",
+         "timestamp": "2027-01-15T08:01:00.000Z",
+         "message": {"role": "assistant", "content": "On the north bench, out of the wind."}},
+    ]
+    (folder / "claude-garden.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+
+def test_the_bundle_installs_agent_si_makes_a_brain_connects_and_records_past_sessions(built, tmp_path) -> None:
     machine = Machine(tmp_path, _uv())
     (machine.home / ".cursor").mkdir()
+    _session(machine)
     done = machine.run(built["file"], "--yes", "--principal", "Test Person", "--timezone", "UTC")
     assert done.returncode == 0, done.stdout + done.stderr
     out = done.stdout
-    assert f"agent-si {__version__} and agent-memory 0.0.1: both wheels match their checksums" in out
+    assert f"agent-si {__version__}: the wheel matches its checksum" in out
     target = (machine.home / "Brains" / "work").resolve()
     assert f"Brain work: created at {target}" in out and "Your name: Test Person" in out
     for harness in ("claude", "codex", "cursor"):
         assert f"  {harness}: written, smoke test pass" in out
-    assert "  claude: written, smoke test pass" in out.split("Connecting agent memory:")[1]
+    assert "agent-memory" not in out and "agent memory" not in out
+    assert f"Past sessions: 1 recorded (2 messages from claude), in {target / 'sessions.sqlite3'}." in out
+    assert "record = false under [sessions] in brain.toml" in out
     assert out.rstrip().endswith("Open a new terminal, start your agent and ask: read my brain brief.")
+    # one search from the installed command finds what the session said
+    found = machine.tool("brain", "read", "search", "--instance", str(target), "--args", '{"query": "bundlecanary"}')
+    assert found.returncode == 0 and json.loads(found.stdout)["sessions"][0]["id"] == "claude:claude-garden#1"
     # the brain answers brief, from the installed command
     brief = machine.tool("brain", "read", "brief", "--instance", str(target))
     assert brief.returncode == 0 and "work" in brief.stdout
-    # both tools are connected through each tool's own command, with the brain and with agent memory
+    # each tool is connected through its own command, with the brain alone
     claude = [call for call in machine.calls("harness-calls.jsonl") if call[0] == "claude" and call[1:3] == ["mcp", "add"]]
     assert len(claude) == 1 and claude[0][-4:] == [str(machine.bin / "brain"), "serve", "--instance", str(target)]
     assert "brain-work" in json.dumps(json.loads((machine.home / ".cursor" / "mcp.json").read_text()))
-    memory = machine.calls("memory-calls.jsonl")
-    assert ["connect", "all"] in memory and ["session", "sync"] in memory
-    assert machine.tool("agent-memory", "--version").stdout.startswith("agent-memory 0.0.1")
+    assert sorted(path.name for path in machine.bin.iterdir()) == ["brain", "brain-fetch"]
     # nothing scheduled, nothing left behind
     assert not (machine.home / "Library" / "LaunchAgents").exists()
     assert not (machine.root / "xdg" / "config" / "systemd").exists()
@@ -271,23 +228,36 @@ def test_without_yes_and_without_a_terminal_it_carries_on_with_the_defaults_and_
     assert Path(done.stdout.split(" at ")[1].splitlines()[0]).is_dir()
 
 
-def test_no_connect_changes_no_agent_tool_but_still_indexes(built, tmp_path) -> None:
+def test_no_connect_changes_no_agent_tool_but_still_records(built, tmp_path) -> None:
     machine = Machine(tmp_path, _uv())
+    _session(machine)
     done = machine.run(built["file"], "--yes", "--principal", "Test Person", "--timezone", "UTC", "--no-connect")
     assert done.returncode == 0, done.stdout + done.stderr
-    assert "not connected (--no-connect)" in done.stdout and "Connecting agent memory" not in done.stdout
+    assert "not connected (--no-connect)" in done.stdout and "Past sessions: 1 recorded" in done.stdout
     assert machine.calls("harness-calls.jsonl") == []
-    assert machine.calls("memory-calls.jsonl") == [["--version"], ["session", "sync"]]
 
 
-def test_a_failed_agent_memory_connect_is_reported_and_exits_1_after_the_rest_ran(built, tmp_path) -> None:
+def test_no_sessions_starts_the_new_brain_with_recording_off(built, tmp_path) -> None:
     machine = Machine(tmp_path, _uv(), fakes=("claude",))
-    done = machine.run(built["file"], "--yes", "--principal", "Test Person", "--timezone", "UTC", STANDIN_FAIL="1")
-    assert done.returncode == 1, done.stdout + done.stderr
-    assert "claude: failed, smoke test fail" in done.stdout
-    assert "Finished, but these steps failed: agent-memory-connect." in done.stdout
-    assert ["session", "sync"] in machine.calls("memory-calls.jsonl")  # the later steps still ran
-    assert "read my brain brief" not in done.stdout.split("Finished, but")[1]
+    _session(machine)
+    done = machine.run(built["file"], "--yes", "--principal", "Test Person", "--timezone", "UTC", "--no-sessions")
+    assert done.returncode == 0, done.stdout + done.stderr
+    target = machine.home / "Brains" / "work"
+    assert "Past sessions: not recorded." in done.stdout
+    assert (target / "brain.toml").read_text().endswith("\n[sessions]\nrecord = false\n")
+    assert not (target / "sessions.sqlite3").exists()
+
+
+def test_an_agent_memory_from_an_earlier_install_is_named_and_left_alone(built, tmp_path) -> None:
+    machine = Machine(tmp_path, _uv(), fakes=())
+    earlier = machine.bin / "agent-memory"
+    earlier.write_text("#!/bin/sh\necho should never be run >&2\nexit 9\n")
+    earlier.chmod(0o755)
+    done = machine.run(built["file"], "--yes", "--principal", "Test Person", "--timezone", "UTC")
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "agent-memory is also installed. The brain now searches your past sessions itself" in done.stdout
+    assert f"to remove it: {earlier} connect all --remove && " in done.stdout and "tool uninstall agent-memory" in done.stdout
+    assert earlier.is_file() and "should never be run" not in done.stderr
 
 
 def _write(path: Path, files: dict[str, bytes], sums: str | None = None) -> Path:
@@ -310,7 +280,7 @@ def test_a_corrupted_wheel_stops_the_install_before_anything_is_installed(built,
     assert done.stderr.startswith(f"install-agent-si: {wheel} failed its SHA-256 check (expected ")
     assert "so nothing was installed; download the bundle again" in done.stderr
     assert not list(machine.bin.iterdir()) and not (machine.root / "uv-tools").exists()
-    assert not (machine.home / "Brains").exists() and machine.calls("memory-calls.jsonl") == []
+    assert not (machine.home / "Brains").exists()
     assert list(machine.tmp.iterdir()) == []
 
 
@@ -322,10 +292,10 @@ def test_a_cut_short_or_wrong_file_says_so(built, tmp_path) -> None:
     done = machine.run(short, "--yes")
     assert done.returncode == 1 and "this file is damaged or was cut short" in done.stderr
     assert "compare its SHA-256 with the one you were given" in done.stderr
-    # a bundle missing a wheel is refused the same way, and an empty SHA256SUMS can't smuggle one past the check
+    # a bundle without its wheel is refused the same way, and an empty SHA256SUMS can't smuggle one past the check
     files = {name: data for name, data in _unpack(built["file"]).items() if name.endswith(".whl")}
-    one = _write(tmp_path / "one.sh", {k: v for k, v in files.items() if k.startswith("agent_si")})
-    assert "the bundle is missing a wheel" in machine.run(one, "--yes").stderr
+    one = _write(tmp_path / "one.sh", {"other-1.0-py3-none-any.whl": b"not the wheel"})
+    assert "the bundle is missing its wheel" in machine.run(one, "--yes").stderr
     nested = _write(tmp_path / "nested.sh", files, sums="0" * 64 + "  ../escape.whl\n")
     assert "SHA256SUMS names ../escape.whl" in machine.run(nested, "--yes").stderr
     assert not list(machine.bin.iterdir())
@@ -343,11 +313,10 @@ def test_options_are_checked_and_a_foreign_command_is_never_replaced(built, tmp_
     (other / "brain").chmod(0o755)
     foreign = machine.run(built["file"], "--yes", PATH=f"{other}:{machine.env['PATH']}")
     assert foreign.returncode == 1 and f"a brain command is already installed at {other / 'brain'}" in foreign.stderr
-    assert not (machine.bin / "agent-memory").exists()  # it stopped before the second tool
+    assert not list(machine.bin.iterdir())  # it stopped before installing anything
     refused = machine.run(built["file"], "--yes", "--name", "Bad Name", "--timezone", "UTC")
     assert refused.returncode == 2 and "lowercase letters, digits and dashes" in refused.stderr
-    assert "Both tools are installed; run this file again with corrected options" in refused.stderr
-    assert machine.calls("memory-calls.jsonl") == [["--version"]]
+    assert "agent-si is installed; run this file again with corrected options" in refused.stderr
 
 
 # -- the script itself ---------------------------------------------------------------------------------------------

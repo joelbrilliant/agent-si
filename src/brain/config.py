@@ -129,6 +129,15 @@ class Usage:
 
 
 @dataclass(frozen=True)
+class Sessions:
+    """[sessions]: the record of past agent sessions beside the brain. On by default: code files what was said, on
+    this machine only. hermes_profiles names extra Hermes homes, as (name, path to state.db) pairs."""
+
+    record: bool = True
+    hermes_profiles: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
 class Updates:
     """[updates]: the release channel, automatic updates, and what the agent may do
     when they're off. Nothing in this build fetches a release, so auto stays off unless a person turns it on
@@ -154,6 +163,7 @@ class Config:
     fetch: Fetch = field(default_factory=Fetch)
     updates: Updates = field(default_factory=Updates)
     usage: Usage = field(default_factory=Usage)
+    sessions: Sessions = field(default_factory=Sessions)
 
 
 _UNGRANTABLE = frozenset({"upsert_fact_key", "set_aliases"})
@@ -170,7 +180,10 @@ _TOP_KEYS = {
     "fetch",
     "updates",
     "usage",
+    "sessions",
 }
+_SESSIONS_KEYS = {"record", "hermes_profiles"}
+_PROFILE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,39}$")
 _UPDATES_KEYS = {"channel", "auto", "policy"}
 _FETCH_KEYS = {"stale_after_runs", "every_minutes"}
 _TRUTH_KEYS = {"entities", "attributes", "source_rank"}
@@ -560,6 +573,31 @@ def _load_usage(raw) -> Usage:
     if type(raw.get("record", True)) is not bool:
         raise ConfigError("usage.record must be true or false")
     return Usage(raw.get("record", True))
+
+
+def _load_sessions(raw) -> Sessions:
+    if raw is None:
+        return Sessions()
+    if not isinstance(raw, dict):
+        raise ConfigError("sessions must be a table")
+    extra = set(raw) - _SESSIONS_KEYS
+    if extra:
+        raise _unknown("sessions." + sorted(extra)[0])
+    record = raw.get("record", True)
+    if type(record) is not bool:
+        raise ConfigError("sessions.record must be true or false")
+    profiles = raw.get("hermes_profiles", {})
+    if not isinstance(profiles, dict):
+        raise ConfigError('sessions.hermes_profiles must be a table of name = "path to state.db"')
+    for name, path in profiles.items():
+        if not _PROFILE_NAME.fullmatch(name) or name == "default":
+            raise ConfigError(
+                f"sessions.hermes_profiles.{name}: a profile name is 1 to 40 lower-case letters, digits, hyphens "
+                'and underscores, starting with a letter, and not "default"'
+            )
+        if not isinstance(path, str) or not path.strip():
+            raise ConfigError(f"sessions.hermes_profiles.{name} must be the path to that profile's state.db")
+    return Sessions(record, tuple(sorted(profiles.items())))
 
 
 def _load_updates(raw) -> Updates:
@@ -1139,4 +1177,5 @@ def _parse_config(raw: bytes) -> Config:
         fetch=_load_fetch_table(data.get("fetch")),
         updates=_load_updates(data.get("updates")),
         usage=_load_usage(data.get("usage")),
+        sessions=_load_sessions(data.get("sessions")),
     )

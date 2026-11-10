@@ -241,6 +241,7 @@ class Door:
 @pytest.fixture(scope="module")
 def door(tmp_path_factory):
     inst = build(tmp_path_factory.mktemp("canary"))
+    _record_canary_session(inst, tmp_path_factory.mktemp("canary-sessions"))
     # The canary sweep makes several hundred reads: lift the per-minute read limit for it.
     saved = hub_server.LIMITS["read"]
     hub_server.LIMITS["read"] = (1_000_000, 60)
@@ -252,17 +253,43 @@ def door(tmp_path_factory):
         hub_server.LIMITS["read"] = saved
 
 
+CANARY_SESSION = "claude:canary-session"
+
+
+def _record_canary_session(inst: Path, scratch: Path) -> None:
+    """A past session that says the canary, in the brain's session record. No door may show it: the record is read
+    only on the machine that holds it."""
+    from brain.sessions import record
+    from brain.sessions.adapters import SessionRoots
+    from tests.test_sessions_record import claude_row, jsonl
+
+    jsonl(scratch / "claude" / "-work" / "canary-session.jsonl", [
+        claude_row("s1", "user", f"{CANARY} {MARK} the launch code is in the violet vault", 1_800_000_000,
+                   session="canary-session"),
+        claude_row("s2", "assistant", f"Noted, {CANARY} {MARK} stays between us.", 1_800_000_060, session="canary-session"),
+    ])
+    roots = SessionRoots(claude_root=scratch / "claude", codex_root=scratch / "x", grok_root=scratch / "g",
+                         hermes_db=scratch / "h.db")
+    assert record.sync(record.path_for(inst), roots).new_messages == 2
+    # On this machine the session is there to be found, so the sweep has something to miss.
+    found = reads.run_tool(inst, "search", {"query": CANARY, "entities": ["session"]}, local=True)
+    assert [item["id"].partition("#")[0] for item in found.structured["sessions"]] == [CANARY_SESSION]
+
+
 def _all_ids(inst: Path) -> dict[str, list[str]]:
-    """Every row id of every entity the read tools name, whichever folder it is in."""
+    """Every row id of every entity the read tools name, whichever folder it is in. A past session isn't in a brain
+    table: the one the door's brain records is named here."""
     tables = {**schemas.ENTITY_TABLE, "fact": "fact_keys", "claim": "claims"}
     con = sqlite3.connect(inst / "brain.sqlite3")
     try:
-        return {
+        ids = {
             entity: [row[0] for row in con.execute(f"SELECT {'key' if entity == 'fact' else 'id'} FROM {table} ORDER BY 1")]
             for entity, table in tables.items()
         }
     finally:
         con.close()
+    ids[reads.SESSION_ENTITY] = [CANARY_SESSION, CANARY_SESSION + "#1"]  # the session, and a line of it
+    return ids
 
 
 def _tool_enum(tool: str, name: str) -> list[str]:

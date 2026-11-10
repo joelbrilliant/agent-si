@@ -1,12 +1,13 @@
 #!/bin/sh
-# agent-si and agent-memory in one file. Read it before you run it: this top part is all the script there is, and
-# below the __AGENT_SI_BUNDLE_PAYLOAD__ line sits a gzipped tar of the two wheels and their SHA256SUMS. It checks
-# every wheel against SHA256SUMS before it installs anything, installs uv if needed (pinned, as install.sh does),
-# installs both wheels as uv tools on uv's own Python, makes a brain, connects every agent tool it finds to the brain
-# and to agent memory, and indexes your past agent sessions once. It installs and checks nothing by name from a package index. It reaches the network only for uv itself (astral.sh) when uv is missing.
+# agent-si in one file. Read it before you run it: this top part is all the script there is, and below the
+# __AGENT_SI_BUNDLE_PAYLOAD__ line sits a gzipped tar of the agent-si wheel and its SHA256SUMS. It checks the wheel
+# against SHA256SUMS before it installs anything, installs uv if needed (pinned, as install.sh does), installs the
+# wheel as a uv tool on uv's own Python, makes a brain, connects every agent tool it finds to the brain, and records
+# your past agent sessions on this machine (--no-sessions leaves that off). It installs and checks nothing by name
+# from a package index. It reaches the network only for uv itself (astral.sh) when uv is missing.
 #   sh install-agent-si.sh [--yes] [--principal NAME] [--name NAME] [--dir FOLDER] [--timezone ZONE]
-#                                  [--no-connect]
-# Run it again to upgrade the two tools; your brain is kept.
+#                                  [--no-connect] [--no-sessions]
+# Run it again to upgrade agent-si; your brain and its session record are kept.
 set -eu
 
 UV_VERSION="0.11.6"  # pinned, at least two weeks old when chosen, bumped on purpose
@@ -28,16 +29,17 @@ sha256() {
 }
 
 usage() {
-  say "usage: sh $0 [--yes] [--principal NAME] [--name NAME] [--dir FOLDER] [--timezone ZONE] [--no-connect]"
+  say "usage: sh $0 [--yes] [--principal NAME] [--name NAME] [--dir FOLDER] [--timezone ZONE] [--no-connect] [--no-sessions]"
   say "  --yes          ask nothing; take every default"
   say "  --principal    your name (default: the account's full name; \"\" for none)"
   say "  --name         the brain's name (default work)"
   say "  --dir          the folder for your brains (default ~/Brains)"
   say "  --timezone     an IANA zone name (default: this machine's)"
   say "  --no-connect   install and make the brain, but don't change any agent tool's settings"
+  say "  --no-sessions  don't record past agent sessions in a new brain"
 }
 
-# Check the bundle against its own SHA256SUMS, setting SI and MEM to the two wheels' file names.
+# Check the bundle against its own SHA256SUMS, setting SI to the wheel's file name.
 verify() {
   [ "$(head -c "$HEADER_BYTES" "$0" | tail -n 1)" = "$MARKER" ] || die "this file is damaged or was cut short; download it again and compare its SHA-256 with the one you were given"
   tail -c +"$((HEADER_BYTES + 1))" "$0" > "$TMP/payload.tgz" || die "can't read this file"
@@ -45,7 +47,7 @@ verify() {
   mkdir "$TMP/files"
   gzip -dc "$TMP/payload.tgz" | tar -xf - -C "$TMP/files" 2>/dev/null || die "this file is damaged (its archive doesn't unpack); download it again"
   [ -f "$TMP/files/SHA256SUMS" ] || die "this file holds no SHA256SUMS; download it again"
-  SI=""; MEM=""
+  SI=""
   while read -r want name; do
     [ -n "$want" ] || continue
     name="${name#\*}"
@@ -53,9 +55,9 @@ verify() {
     [ -f "$TMP/files/$name" ] || die "the bundle lists $name but doesn't hold it; download it again"
     got="$(sha256 "$TMP/files/$name")"
     [ "$got" = "$want" ] || die "$name failed its SHA-256 check (expected $want, got $got), so nothing was installed; download the bundle again"
-    case "$name" in agent_si-*.whl) SI="$name" ;; agent_memory-*.whl) MEM="$name" ;; esac
+    case "$name" in agent_si-*.whl) SI="$name" ;; esac
   done < "$TMP/files/SHA256SUMS"
-  [ -n "$SI" ] && [ -n "$MEM" ] || die "the bundle is missing a wheel; download it again"
+  [ -n "$SI" ] || die "the bundle is missing its wheel; download it again"
 }
 
 # Set UV to a usable uv, installing the pinned one when there isn't. The lines below are install.sh's, word for word
@@ -91,19 +93,13 @@ install_tool() {
   say "$out"
 }
 
-# One line per tool from agent-memory's one JSON line, or the line itself when it isn't the shape this expects.
-memory_summary() {
-  case "$1" in *'"results": []'*) say "  no agent tools found"; return ;; esac
-  rows="$(printf '%s\n' "$1" | tr '}' '\n' | sed -n 's/.*"harness": "\([^"]*\)".*"smoke": "\([^"]*\)".*"status": "\([^"]*\)".*/  \1: \3, smoke test \2/p')"
-  if [ -n "$rows" ]; then say "$rows"; else say "  $1"; fi
-}
-
 main() {
-  YES=""; PRINCIPAL=""; HAVE_PRINCIPAL=""; NAME=""; DIR=""; ZONE=""; NO_CONNECT=""
+  YES=""; PRINCIPAL=""; HAVE_PRINCIPAL=""; NAME=""; DIR=""; ZONE=""; NO_CONNECT=""; NO_SESSIONS=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --yes) YES=1; shift ;;
       --no-connect) NO_CONNECT=1; shift ;;
+      --no-sessions) NO_SESSIONS=1; shift ;;
       --principal) [ $# -ge 2 ] || die "--principal needs a name" 2; PRINCIPAL="$2"; HAVE_PRINCIPAL=1; shift 2 ;;
       --name) [ $# -ge 2 ] || die "--name needs a name" 2; NAME="$2"; shift 2 ;;
       --dir) [ $# -ge 2 ] || die "--dir needs a folder" 2; DIR="$2"; shift 2 ;;
@@ -126,17 +122,15 @@ main() {
 
   verify
   VERSION_SI="${SI#agent_si-}"; VERSION_SI="${VERSION_SI%%-*}"
-  VERSION_MEM="${MEM#agent_memory-}"; VERSION_MEM="${VERSION_MEM%%-*}"
-  say "agent-si $VERSION_SI and agent-memory $VERSION_MEM: both wheels match their checksums"
+  say "agent-si $VERSION_SI: the wheel matches its checksum"
 
   ensure_uv
   BIN="$("$UV" tool dir --bin)" || die "uv tool dir --bin failed"
-  say "Installing both on uv's Python $PYTHON"
+  say "Installing it on uv's Python $PYTHON"
   install_tool brain "$SI"
-  install_tool agent-memory "$MEM"
   "$UV" tool update-shell >/dev/null 2>&1 || true
 
-  # The tools find each other and the agent tools through these, whether or not uv's folder is on PATH yet.
+  # The brain finds itself and the agent tools through these, whether or not uv's folder is on PATH yet.
   UV_TOOL_BIN_DIR="$BIN"; export UV_TOOL_BIN_DIR
   PATH="$BIN:$PATH"; export PATH
 
@@ -147,31 +141,24 @@ main() {
   [ -z "$DIR" ] || set -- "$@" --dir "$DIR"
   [ -z "$ZONE" ] || set -- "$@" --timezone "$ZONE"
   [ -z "$NO_CONNECT" ] || set -- "$@" --no-connect
+  [ -z "$NO_SESSIONS" ] || set -- "$@" --no-sessions
   problems=""
   say ""
   code=0
   "$BIN/brain" "$@" || code=$?
-  [ "$code" -ne 2 ] || die "brain setup didn't like its options (see above). Both tools are installed; run this file again with corrected options" 2
+  [ "$code" -ne 2 ] || die "brain setup didn't like its options (see above). agent-si is installed; run this file again with corrected options" 2
   [ "$code" -eq 0 ] || problems="$problems brain-setup"
 
-  say ""
-  if [ -z "$NO_CONNECT" ]; then
-    say "Connecting agent memory:"
-    code=0
-    out="$("$BIN/agent-memory" connect all 2>&1)" || code=$?
-    memory_summary "$out"
-    if [ "$code" -eq 0 ]; then
-      say "  undo: $BIN/agent-memory connect all --remove"
-    else
-      problems="$problems agent-memory-connect"
-    fi
+  if [ -x "$BIN/agent-memory" ]; then
+    # An earlier installer put agent memory beside the brain. It still works, and nothing here removes it.
+    say ""
+    say "agent-memory is also installed. The brain now searches your past sessions itself, so you only need it for its notes search."
+    say "  to remove it: $BIN/agent-memory connect all --remove && $UV tool uninstall agent-memory"
   fi
-  say "Indexing your past agent sessions once (Claude Code, Codex, Grok). This can take a minute."
-  "$BIN/agent-memory" session sync || problems="$problems session-sync"
 
   say ""
   if [ -n "$problems" ]; then
-    say "Finished, but these steps failed:$problems. Nothing was rolled back. Fix what's printed above, then run this file again: it upgrades the tools and keeps your brain."
+    say "Finished, but these steps failed:$problems. Nothing was rolled back. Fix what's printed above, then run this file again: it upgrades agent-si and keeps your brain."
     exit 1
   fi
   say "Open a new terminal, start your agent and ask: read my brain brief."
