@@ -24,6 +24,7 @@ from brain import strict
 from brain import truth
 from brain import units
 from brain import validate
+from brain import watch as watch_mod
 from brain.collectors import REGISTRY
 from brain.text import has_line_break
 from brain.collectors.base import local_date
@@ -400,10 +401,59 @@ class Applier:
             return self._finish_decision(
                 packet, "held", "", [], decided_at, None, existing, hold_reason=hold, warning=hold
             )
+        self._watch_notes(packet, targets)
         self.con.execute("RELEASE ops")
         return self._finish_decision(
             packet, "applied", "", targets, decided_at, review, existing, warning="; ".join(self._notes), via=via
         )
+
+    _WATCH_NOTES = 5
+
+    def _watch_notes(self, packet: dict, targets: list[dict]) -> None:
+        """Name each watched fact a source this packet added mentions (brain.watch), unless the packet writes that
+        fact itself. The words leave with the receipt, so the sender reads them while the source is in hand. It asks
+        the question the reads ask (watch.newer), so a receipt and fact_get never disagree."""
+        rules = watch_mod.load(self.instance_dir, (item.key for item in self.config.fact_keys))[0]
+        added = {item["id"] for item in targets if item["table"] == "sources" and item["action"] == "insert"}
+        if not rules or not added:
+            return
+        written = {item["id"] for item in targets if item["table"] == "facts"}
+        for item in targets:
+            if item["table"] == "claims":
+                claim = self.con.execute("SELECT key FROM claims WHERE id = ?", (item["id"],)).fetchone()
+                if claim is not None:
+                    written.add(claim[0])
+        for op in packet["ops"]:
+            row = op.get("row")
+            if op.get("op") == "upsert_fact" and isinstance(row, dict) and isinstance(row.get("key"), str):
+                written.add(row["key"])  # a re-verification that left the fact row as it was
+        found: list[tuple[str, str]] = []
+        for key in sorted(rules):
+            if key in written:
+                continue
+            for source_id, _day in watch_mod.newer(self.con, key, rules[key]):
+                if source_id in added:
+                    found.append((source_id, key))
+        for source_id, key in found[: self._WATCH_NOTES]:
+            self._notes.append(
+                f"source {source_id} mentions watched fact {key} ({self._watch_now(key)}): send add_claim on "
+                "this key if the source changes the value, or upsert_fact with last_verified_at if the value stands"
+            )
+        if len(found) > self._WATCH_NOTES:
+            self._notes.append(
+                f"{len(found) - self._WATCH_NOTES} more mentions of watched facts are left out here, and the brief "
+                "lists each fact"
+            )
+
+    def _watch_now(self, key: str) -> str:
+        """A watched fact's value in a few words, for the note."""
+        fact = self._load_row("facts", "key", key)
+        if fact is None or fact["status"] == "retired":
+            return "no value yet"
+        if fact["status"] == "disputed":
+            return "now disputed"
+        value = units.render(fact["value_type"], units.typed(fact["value_type"], fact))
+        return f"now {single_line(value, max_chars=80)}, as of {fact['as_of']}"
 
     def _is_tombstone_id(self, source_id) -> bool:
         if not isinstance(source_id, str):

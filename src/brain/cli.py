@@ -562,6 +562,13 @@ def _cmd_check(ns) -> int:
             print(f"brain: {line}", file=sys.stderr)
         if cfg is not None and not cfg.writes.notes:
             print(f"brain: notes are off, and {noted_rows} rows hold note text", file=sys.stderr)
+    if cfg is not None:
+        from brain import watch
+
+        # The watch list never stops a read or a write, so what is wrong with it is said here and is not a problem
+        # that pauses the brain.
+        for line in watch.load(instance, (item.key for item in cfg.fact_keys))[1]:
+            print(f"brain: {line}", file=sys.stderr)
     problems = store.check_instance(instance)
     _print_json({"ok": not problems, "problems": problems})
     return 0 if not problems else 1

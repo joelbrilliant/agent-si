@@ -193,6 +193,19 @@ Each fact holds several sourced values, called claims. Only the applier writes `
 - **Numbers:** a `number` key holds a float and loses integer precision above 2^53, so whole quantities that large belong in an `int` key.
 - **Upgrading:** after `brain migrate` to schema 5, run `brain apply-config` when `brain.toml` has a `[truth]` table, or `brain check` reports that the aliases differ.
 
+## Watched facts (1.17.0)
+
+A fact is only as current as its last claim. New information arrives as sources, and nothing moves a claim when it does. So you list the few facts other people rely on, and the brain shows, as a source is added and each time the fact is read, that newer sources mention it. Code does it with words you wrote. No model reads anything, and nothing is stored.
+
+- **Listing a fact:** `watch.toml`, beside `brain.toml`, holds one table per watched fact key, such as `["support.hours"]` then `words = [["help desk", "support line"], ["hours", "open", "opening"]]`. `words` is 1 to 4 groups of up to 24 phrases each. Groups are joined by and, the phrases in a group by or. A source mentions the fact when one paragraph of its title or text holds a phrase from every group. A paragraph is a line with hard-wrapped lines joined, so a chat message, a list item or an email paragraph. Words match whole, whatever their case or accents, and `Help-Desk` reads as `help desk`. List the forms you expect (`open`, `opens`, `opening`).
+- **When a source is added:** `brain apply` names each watched fact the new source mentions in the receipt's warning, with the fact's value and date and what to send next. A packet that writes the fact itself gets no warning. A dry run says the same.
+- **When the fact is read:** `fact_get` shows `claims.watch` on a watched fact: `newer_sources`, and when there are some, the `latest` source date, the newest five source ids and a `next` line. `get` on the fact shows the same under `related.watch`. A fact hit in `search` carries `newer_sources`, and `brief` adds a line such as `1 watched fact has newer sources: support.hours (3, latest 2026-11-04). fact_get lists them.`
+- **Which sources count:** those captured after the fact was last written or verified, dated on or after the day its value speaks for, and cited by no claim on the key. A watched key with no value yet counts every source that mentions it.
+- **Clearing:** read the sources, then send `add_claim` on the key if one changes the value, or `upsert_fact` with the key and `last_verified_at` if the value stands. Either makes those sources no longer newer. There is no flag to dismiss.
+- **Writing the words:** name the thing and the words that mark a change to it. Too few words flag every passing mention, and a word the messages never use flags nothing. On one real brain a three-group rule flagged 15 of 1,504 sources in 17 days, the two that carried the new answer among them.
+- **A wrong list never stops the brain:** an entry that can't be used (a key `brain.toml` doesn't register, a setting other than `words`, a bad group) is left out and the rest apply. `brain check` names each on stderr and stays ok, and `brief` says `watch.toml has 1 entry to fix. Run brain check.` With no `watch.toml`, every read and receipt is as it was before 1.17.0.
+- **Limits:** the list takes effect on the next read, with no `apply-config`, and an older engine ignores the file. `brain backup` doesn't carry `watch.toml` yet, so copy it yourself. A folder token and a hub reader with folders see no watch fields. The engine doesn't guess which facts a source touches: on that brain, word matching across every key put the right fact in its top ten for 193 of 610 past cases.
+
 ## Strict writes
 
 From 0.7.0a2, facts and state dates are checked against their cited source, and notes are labelled for what they are.

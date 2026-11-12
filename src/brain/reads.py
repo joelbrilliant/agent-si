@@ -11,6 +11,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from brain import advice, registry, schemas, scope, store, strict, truth, units, versions
+from brain import watch as watch_mod
 from brain.config import ConfigError, load_config
 from brain.ingress import has_lone_surrogate
 from brain.migrate import latest_version
@@ -926,13 +927,15 @@ def _scope_item(con, key: str, state, bucket, mode: str, truth_config) -> dict:
     return item
 
 
-def _fact_get(con: sqlite3.Connection, arguments: dict, now: str, truth_config=None) -> ToolResult:
+def _fact_get(
+    con: sqlite3.Connection, arguments: dict, now: str, truth_config=None, watched: dict | None = None
+) -> ToolResult:
     text = arguments["key"]
     include_retired = arguments["include_retired"]
     scope = arguments.get("scope")
     mode = arguments["claims"]
     if text.endswith(".*"):
-        return _fact_prefix(con, text, include_retired, now, scope, mode, truth_config)
+        return _fact_prefix(con, text, include_retired, now, scope, mode, truth_config, watched)
     found = truth.resolve(con, text)
     if not found:
         raise _unknown_key(con, text)
@@ -957,7 +960,8 @@ def _fact_get(con: sqlite3.Connection, arguments: dict, now: str, truth_config=N
             message = f"fact key {key} has no value for scope {scope}"
             raise ToolError("no_value", message + ("." + tail if tail else ""))
         item = _scope_item(con, key, state, bucket, mode, truth_config)
-    return _ok(_fact_result(text, [_with_signals(con, item)], 1, [], resolved=None if text == key else key))
+    item = _with_watch(con, _with_signals(con, item), watched)
+    return _ok(_fact_result(text, [item], 1, [], resolved=None if text == key else key))
 
 
 def _fact_prefix(
@@ -968,6 +972,7 @@ def _fact_prefix(
     scope: str | None = None,
     mode: str = "auto",
     truth_config=None,
+    watched: dict | None = None,
 ) -> ToolResult:
     prefix = key[:-1]
     registered = [
@@ -1004,9 +1009,10 @@ def _fact_prefix(
     for name, state, found in shown[:25]:
         state = state or truth.state(con, name, truth_config)
         if isinstance(found, truth.Bucket):
-            items.append(_with_signals(con, _scope_item(con, name, state, found, mode, truth_config)))
+            item = _scope_item(con, name, state, found, mode, truth_config)
         else:
-            items.append(_with_signals(con, _now_item(con, name, state, found, mode, truth_config)))
+            item = _now_item(con, name, state, found, mode, truth_config)
+        items.append(_with_watch(con, _with_signals(con, item), watched))
     return _ok(_fact_result(key, items, len(shown), unset))
 
 
@@ -1025,6 +1031,16 @@ def _with_signals(con: sqlite3.Connection, item: dict) -> dict:
     )
     if rows:
         item["claims"]["signals"] = _listed(rows)
+    return item
+
+
+def _with_watch(con: sqlite3.Connection, item: dict, watched: dict | None) -> dict:
+    """A watched fact's newer sources under claims.watch (1.17.0, brain.watch): how many sources that arrived since
+    the fact was last written or verified mention it, the newest few, and what to send. It sits in claims for the
+    reason signals do. A fact with no watch rule, and every read through a folder token, is unchanged."""
+    rule = (watched or {}).get(item["key"])
+    if rule:
+        item["claims"]["watch"] = watch_mod.summary(watch_mod.newer(con, item["key"], rule))
     return item
 
 
@@ -2116,7 +2132,8 @@ def _dated_rows(con, match: str, arguments: dict, limit: int, offset: int, zone:
 
 
 def _search(
-    con: sqlite3.Connection, arguments: dict, zone: str, scoped: bool = False, side: SessionSide | None = None
+    con: sqlite3.Connection, arguments: dict, zone: str, scoped: bool = False, side: SessionSide | None = None,
+    watched: dict | None = None,
 ) -> ToolResult:
     raw = arguments.get("query") or ""
     since, until = arguments.get("since"), arguments.get("until")
@@ -2199,6 +2216,11 @@ def _search(
             # The fact document holds claim quotes, so a snippet would show one side's value.
             hit["snippet"] = "disputed"
             hit["disputed"] = True
+        if row["entity"] == "fact" and watched and row["ref_id"] in watched:
+            # A watched fact that newer sources mention (brain.watch): fact_get on it lists them.
+            behind = len(watch_mod.newer(con, row["ref_id"], watched[row["ref_id"]]))
+            if behind:
+                hit["newer_sources"] = behind
         if row["entity"] in _MARKER_ENTITIES and _query(
             con,
             "SELECT 1 FROM unchecked_text WHERE entity = ? AND ref_id = ?",
@@ -3008,7 +3030,9 @@ def _notes(con: sqlite3.Connection, entity: str, subject_id: str, typed: dict) -
     return {"label": strict.NOTE_LABEL, "fields": fields}
 
 
-def _get(con: sqlite3.Connection, arguments: dict, now: str, zone: str) -> ToolResult:
+def _get(
+    con: sqlite3.Connection, arguments: dict, now: str, zone: str, watched: dict | None = None
+) -> ToolResult:
     entity = arguments["entity"]
     subject_id = arguments["id"]
     if arguments["include_history"] and entity not in {"record", "fact"}:
@@ -3039,6 +3063,10 @@ def _get(con: sqlite3.Connection, arguments: dict, now: str, zone: str) -> ToolR
             typed = None
             source = None
         related = _related(con, entity, keys[0])
+        rule = (watched or {}).get(subject_id)
+        if rule:
+            # A watched fact opened from a search hit says what fact_get says (brain.watch).
+            related["watch"] = watch_mod.summary(watch_mod.newer(con, subject_id, rule))
         pages = None
     elif entity == "claim":
         found = _query(con, "SELECT * FROM claims WHERE id = ?", (subject_id,))
@@ -3853,7 +3881,7 @@ def _brief(
             f"the evidence gate ({', '.join(parts)}). get shows the sentences."
         )
     if not scoped:
-        lines.extend(_brain_wide_lines(con, now, config))
+        lines.extend(_brain_wide_lines(con, now, config, instance_dir))
     result = _signals(con, {"limit": 100, "_projects": None if branch is None else set(branch)}).structured
     counts, unknown = result["counts"], result["unknown_outbound"]
     line = (
@@ -3879,7 +3907,7 @@ def _brief(
     return ToolResult(text, None, False, None)
 
 
-def _brain_wide_lines(con: sqlite3.Connection, now: str, config) -> list[str]:
+def _brain_wide_lines(con: sqlite3.Connection, now: str, config, instance_dir: Path | None = None) -> list[str]:
     """The brief's lines about facts, held changes, intake, updates and stale facts: brain-wide, and none of them for a
     folder token. Their order sits between the checklist lines and the Signals line."""
     lines: list[str] = []
@@ -3921,7 +3949,41 @@ def _brain_wide_lines(con: sqlite3.Connection, now: str, config) -> list[str]:
         if extra:
             body += f", +{extra} more"
         lines.append(f"{len(stale)} facts stale: {body}.")
+    if instance_dir is not None:
+        lines.extend(_watched_lines(con, config, instance_dir))
     return lines
+
+
+def _watched_lines(con: sqlite3.Connection, config, instance_dir: Path) -> list[str]:
+    """The brief's lines for watched facts (1.17.0, brain.watch): the facts newer sources mention, most sources
+    first, and a line when watch.toml has an entry that can't be used. Nothing when no fact is watched or none has a
+    newer source, so a brain with no watch list keeps its brief."""
+    rules, problems = watch_mod.load(instance_dir, (item.key for item in config.fact_keys))
+    lines = []
+    if problems:
+        count = len(problems)
+        lines.append(f"{watch_mod.FILE} has {count} {'entry' if count == 1 else 'entries'} to fix. Run brain check.")
+    line = _watched_line(con, rules)
+    if line is not None:
+        lines.append(line)
+    return lines
+
+
+def _watched_line(con: sqlite3.Connection, rules: dict) -> str | None:
+    behind = []
+    for key, rule in sorted(rules.items()):
+        found = watch_mod.newer(con, key, rule)
+        if found:
+            behind.append((len(found), max(day for _id, day in found), key))
+    if not behind:
+        return None
+    behind.sort(key=lambda item: (-item[0], item[2]))
+    body = ", ".join(f"{key} ({count}, latest {day})" for count, day, key in behind[:5])
+    extra = len(behind) - 5
+    if extra > 0:
+        body += f", +{extra} more"
+    noun = "fact has" if len(behind) == 1 else "facts have"
+    return f"{len(behind)} watched {noun} newer sources: {body}. fact_get lists them."
 
 
 def _finish(con: sqlite3.Connection) -> None:
@@ -4067,14 +4129,19 @@ def _execute(
                         _SEARCH_OK.clear()
                     _SEARCH_OK.add(seen)
             con.row_factory = sqlite3.Row
+            # Watched facts (brain.watch) are worked out for a reader of the whole brain. A folder token reads through
+            # filtered views, so its answers stay as they were.
+            watched = None
+            if folders is None and name in ("fact_get", "search", "get"):
+                watched = watch_mod.load(instance_dir, (item.key for item in config.fact_keys))[0]
             if name == "fact_get":
-                return _fact_get(con, arguments, now, config.truth)
+                return _fact_get(con, arguments, now, config.truth, watched)
             if name == "records_query":
                 return _records_query(con, arguments, now)
             if name == "search":
-                return _search(con, arguments, config.timezone, folders is not None, side)
+                return _search(con, arguments, config.timezone, folders is not None, side, watched)
             if name == "get":
-                return _get(con, arguments, now, config.timezone)
+                return _get(con, arguments, now, config.timezone, watched)
             if name == "signals":
                 return _signals(con, arguments)
             if name == "brief":

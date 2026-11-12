@@ -78,6 +78,19 @@ Your agent tools already keep what you and they said. agent-si files that dialog
 - **One switch.** `[sessions] record = false` in `brain.toml` turns it off, and `--no-sessions` starts a new brain that way. `brain sessions status` shows what is held.
 - **Limits.** A message that looks like it holds a secret (an API key, a private key, `TOKEN=...`) is never stored. The file is readable by your account only. `brain backup` doesn't carry it yet, so copy `sessions.sqlite3` yourself. A folder token and a hub connection never see it.
 
+## Facts that stay current
+
+A fact goes out of date quietly: the new answer arrives in a message, and the fact still says the old one. List the few facts other people rely on in `watch.toml`, beside `brain.toml`, with the words that signal each one, and the brain tells every agent when a newer source mentions it.
+
+```toml
+["support.hours"]
+words = [["help desk", "support line"], ["hours", "open", "opening"]]
+```
+
+- **As the source is added.** `brain apply` names the fact, its value and its date in the receipt, so the agent holding the new message can update it there and then.
+- **Each time it's read.** `fact_get`, `get`, `search` and `brief` show that newer sources mention the fact, and which, until a new claim or a re-check is newer than they are.
+- **By fixed rules.** The words are yours and code matches them a paragraph at a time. No model reads your sources, and nothing is guessed. [docs/REFERENCE.md](docs/REFERENCE.md) has the details.
+
 ## Bring your work in
 
 `brain-fetch` captures text from a documents folder, Gmail, Slack, Google Calendar and GitHub, with read-only access, into sources. `brain-fetch setup gmail` (or `slack`, `calendar`, `github`, `documents`) prints the steps for each. For email and Slack, addresses and phone numbers are replaced before anything is stored, and quoted history, signatures and bot posts are dropped. The engine itself never touches the network.
